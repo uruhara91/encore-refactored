@@ -9,26 +9,50 @@
 #include <cstdio>
 #include <csignal>
 
+// Helper: Read file to string (Optimized)
+bool FreezeManager::ReadFileToString(const std::string& path, std::string& outContent) {
+    int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd == -1) {
+        // ADDED: Log error if file cannot be opened
+        LOGE("FreezeManager: Failed to open config at %s", path.c_str());
+        return false;
+    }
+
+    struct stat sb;
+    if (fstat(fd, &sb) == -1) { 
+        close(fd); 
+        return false; 
+    }
+    
+    size_t fileSize = static_cast<size_t>(sb.st_size);
+    outContent.resize(fileSize);
+    
+    size_t totalRead = 0;
+    while (totalRead < fileSize) {
+        ssize_t bytes = read(fd, &outContent[totalRead], fileSize - totalRead);
+        if (bytes <= 0) break;
+        totalRead += bytes;
+    }
+    close(fd);
+    return true;
+}
+
 void FreezeManager::LoadConfig(const std::string& configPath) {
     freezeList.clear();
     
     std::string content;
     if (!ReadFileToString(configPath, content)) return;
 
-    // Parsing manual tanpa stringstream untuk performa
     const char* ptr = content.c_str();
     const char* end = ptr + content.length();
     
     while (ptr < end) {
-        // Lewati whitespace/newline di awal
         while (ptr < end && (*ptr == '\n' || *ptr == '\r' || *ptr == ' ' || *ptr == '\t')) ptr++;
         if (ptr >= end) break;
 
-        // Cari akhir baris
         const char* lineEnd = ptr;
         while (lineEnd < end && *lineEnd != '\n' && *lineEnd != '\r') lineEnd++;
 
-        // Abaikan komentar '#'
         if (*ptr != '#') {
             std::string line(ptr, lineEnd - ptr);
             if (!line.empty()) {
@@ -37,37 +61,36 @@ void FreezeManager::LoadConfig(const std::string& configPath) {
         }
         ptr = lineEnd;
     }
-    LOGI("FreezeManager: Loaded %zu apps to freeze", freezeList.size());
+    LOGI("FreezeManager: Loaded %zu apps to freeze from %s", freezeList.size(), configPath.c_str());
 }
 
 void FreezeManager::ApplyFreeze(bool freeze) {
-    if (freezeList.empty()) return;
-    int signal = freeze ? SIGSTOP : SIGCONT; // SIGSTOP (19), SIGCONT (18)
+    if (freezeList.empty()) {
+        LOGI("FreezeManager: List empty, skipping freeze/unfreeze");
+        return;
+    }
+    int signal = freeze ? SIGSTOP : SIGCONT;
     
-    // Optimasi: Tidak perlu log "Starting..." jika list kosong, 
-    // tapi karena kita sudah cek empty, aman.
-    
+    LOGI("FreezeManager: Applying %s to %zu apps...", freeze ? "FREEZE" : "UNFREEZE", freezeList.size());
+
     for (const auto& pkg : freezeList) {
         SendSignalToPkg(pkg, signal);
     }
 }
 
-// Implementasi SendSignalToPkg yang menyatu dengan pencarian PID
-// Ini menghindari iterasi /proc berulang kali (sekali iterasi /proc untuk semua target kalau mau ultra optimal, 
-// tapi untuk menjaga struktur kode tetap rapi, kita optimalkan loop-nya saja).
 void FreezeManager::SendSignalToPkg(const std::string& targetPkg, int signal) {
     DIR* dir = opendir("/proc");
     if (!dir) return;
 
     struct dirent* ent;
-    char cmdlinePath[64]; // Buffer stack (cepat)
-    char cmdlineBuf[256]; // Buffer untuk isi cmdline
+    char cmdlinePath[64]; 
+    char cmdlineBuf[256]; 
     
+    bool found = false; // Flag to check if we found the app
+
     while ((ent = readdir(dir)) != NULL) {
-        // Filter cepat: pastikan digit (PID)
         if (ent->d_name[0] < '0' || ent->d_name[0] > '9') continue;
 
-        // Bangun path string secara manual (hindari std::string alloc di loop)
         snprintf(cmdlinePath, sizeof(cmdlinePath), "/proc/%s/cmdline", ent->d_name);
 
         int fd = open(cmdlinePath, O_RDONLY | O_CLOEXEC);
@@ -76,46 +99,21 @@ void FreezeManager::SendSignalToPkg(const std::string& targetPkg, int signal) {
             close(fd);
 
             if (len > 0) {
-                cmdlineBuf[len] = 0; // Null terminate
-                // Cek apakah cmdline == targetPkg
-                // cmdline di Android dipisahkan null, arg pertama adalah package name
+                cmdlineBuf[len] = 0; 
                 if (strcmp(cmdlineBuf, targetPkg.c_str()) == 0) {
                     int pid = atoi(ent->d_name);
                     if (kill(pid, signal) == 0) {
-                         // Optional debug log, matikan untuk production extreme performance
                          // LOGD("FreezeManager: Signal %d -> %d (%s)", signal, pid, targetPkg.c_str());
+                         found = true;
                     }
                 }
             }
         }
     }
     closedir(dir);
-}
-
-bool FreezeManager::ReadFileToString(const std::string& path, std::string& outContent) {
-    int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
-    if (fd == -1) return false;
-
-    // Ambil ukuran file
-    struct stat sb;
-    if (fstat(fd, &sb) == -1) { close(fd); return false; }
     
-    // FIX: Cast off_t (signed) ke size_t (unsigned) agar kompatibel
-    size_t fileSize = static_cast<size_t>(sb.st_size);
-    
-    outContent.resize(fileSize);
-    
-    // ReadAll loop
-    size_t totalRead = 0;
-    while (totalRead < fileSize) {
-        // read() mengharapkan size_t untuk jumlah byte
-        ssize_t bytes = read(fd, &outContent[totalRead], fileSize - totalRead);
-        
-        // Handle error (-1) atau EOF (0)
-        if (bytes <= 0) break;
-        
-        totalRead += bytes;
+    if (!found && signal == SIGSTOP) {
+        // Optional: Log if app not found during freeze (might be noisy)
+        // LOGD("FreezeManager: App %s not running", targetPkg.c_str());
     }
-    close(fd);
-    return true;
 }
