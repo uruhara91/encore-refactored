@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
-#include <map>
+#include <vector>
+#include <utility>
 
 class ResolutionManager {
 public:
@@ -15,8 +16,15 @@ public:
 
 private:
     ResolutionManager() = default;
-    // Map pkg -> ratio string (e.g., "0.7")
-    std::map<std::string, std::string> gameRatios; 
     
-    void ExecuteCmd(const std::string& cmd);
+    // Gunakan vector pair untuk iterasi cepat jika jumlah game sedikit (<100)
+    // atau tetap std::map jika butuh lookup cepat. 
+    // Untuk optimasi memori dan alokasi, vector<pair> lebih ramah cache processor daripada map node.
+    std::vector<std::pair<std::string, std::string>> gameRatios;
+    
+    // Helper untuk mencari ratio di vector
+    std::string GetRatio(const std::string& pkg);
+
+    // Eksekusi langsung tanpa shell
+    void ExecuteCmdDirect(const std::vector<const char*>& args);
 };
