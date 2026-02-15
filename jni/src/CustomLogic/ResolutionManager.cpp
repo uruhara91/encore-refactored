@@ -7,13 +7,13 @@
 #include <cstring>
 #include <cstdio>
 #include <vector>
+#include <string> // FIX: Tambahkan string explisit
 
 void ResolutionManager::LoadGameMap(const std::string& configPath) {
     gameRatios.clear();
     
     int fd = open(configPath.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
-        // ADDED: Log error
         LOGE("ResolutionManager: Failed to open config at %s", configPath.c_str());
         return;
     }
@@ -45,18 +45,15 @@ void ResolutionManager::LoadGameMap(const std::string& configPath) {
             std::string pkg = line.substr(0, delPos);
             std::string ratio = line.substr(delPos + 1);
             
-            // Trim whitespace logic (Manual implementation for speed)
-            // Trim right
             pkg.erase(pkg.find_last_not_of(" \t\r\n") + 1);
             ratio.erase(ratio.find_last_not_of(" \t\r\n") + 1);
-            // Trim left
             pkg.erase(0, pkg.find_first_not_of(" \t\r\n"));
             ratio.erase(0, ratio.find_first_not_of(" \t\r\n"));
 
             gameRatios.push_back({pkg, ratio});
         }
     }
-    LOGI("ResolutionManager: Loaded %zu configs from %s", gameRatios.size(), configPath.c_str());
+    LOGI("ResolutionManager: Loaded %zu configs", gameRatios.size());
 }
 
 std::string ResolutionManager::GetRatio(const std::string& pkg) {
@@ -68,14 +65,9 @@ std::string ResolutionManager::GetRatio(const std::string& pkg) {
 
 void ResolutionManager::ApplyGameMode(const std::string& packageName) {
     std::string ratio = GetRatio(packageName);
-    
-    // Jika tidak ada config, return
     if (ratio.empty()) return;
 
-    // OPTIMASI: Cek cache. Jika sudah diapply dengan rasio yang sama, skip.
-    if (appliedCache.contains(packageName) && appliedCache[packageName] == ratio) {
-        return; 
-    }
+    if (appliedCache.contains(packageName) && appliedCache[packageName] == ratio) return;
 
     std::vector<const char*> args = {
         "/system/bin/cmd", "game", "mode", "set", "--downscale", 
@@ -83,13 +75,11 @@ void ResolutionManager::ApplyGameMode(const std::string& packageName) {
     };
     ExecuteCmdDirect(args);
     
-    // Update cache
     appliedCache[packageName] = ratio;
     LOGI("ResolutionManager: Applied %s to %s", ratio.c_str(), packageName.c_str());
 }
 
 void ResolutionManager::ResetGameMode(const std::string& packageName) {
-    // Cek cache dulu, kalau memang belum diapply (atau sudah standar), gausah reset
     if (!appliedCache.contains(packageName)) return;
 
     std::vector<const char*> args = {
@@ -98,18 +88,13 @@ void ResolutionManager::ResetGameMode(const std::string& packageName) {
     };
     ExecuteCmdDirect(args);
     
-    // Hapus dari cache
     appliedCache.erase(packageName);
     LOGD("ResolutionManager: Reset %s", packageName.c_str());
 }
 
 void ResolutionManager::ExecuteCmdDirect(const std::vector<const char*>& args) {
     pid_t pid = fork();
-    
-    if (pid == -1) {
-        LOGE("ResolutionManager: Fork failed");
-        return;
-    }
+    if (pid == -1) return;
     
     if (pid == 0) {
         int devNull = open("/dev/null", O_RDWR);
@@ -120,7 +105,6 @@ void ResolutionManager::ExecuteCmdDirect(const std::vector<const char*>& args) {
         execv(args[0], const_cast<char* const*>(args.data()));
         _exit(127);
     } else {
-        int status;
-        waitpid(pid, &status, 0);
+        waitpid(pid, nullptr, 0);
     }
 }

@@ -16,9 +16,15 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <thread>
+#include <iostream>
+#include <string>
 #include <vector>
+#include <thread>
+#include <chrono>
 #include <string_view>
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h> 
@@ -38,6 +44,7 @@
 #include <ShellUtility.hpp>
 #include <SignalHandler.hpp>
 
+// Custom Logic Managers
 #include "../src/CustomLogic/BypassManager.hpp"
 #include "../src/CustomLogic/ResolutionManager.hpp"
 
@@ -160,7 +167,7 @@ void encore_main_daemon(void) {
             continue;
         }
 
-        // 3. GAME VALIDATION (Jika sedang main)
+        // 3. GAME VALIDATION
         if (in_game_session && !active_package.empty()) {
              if (!pid_tracker.is_valid()) {
                 LOGI("Game PID dead: %s", active_package.c_str());
@@ -189,7 +196,6 @@ void encore_main_daemon(void) {
         // STATE: GAMING
         // ===========================
         if (!active_package.empty() && window_displays.screen_awake) {
-            // New Game Session
             if (active_package != last_game_package) {
                 LOGI("Enter Game: %s", active_package.c_str());
                 ResolutionManager::GetInstance().ApplyGameMode(active_package);
@@ -197,7 +203,6 @@ void encore_main_daemon(void) {
                 last_game_package = active_package;
             }
 
-            // Enforce Performance Profile
             if (cur_mode != PERFORMANCE_PROFILE) {
                 pid_t game_pid = Dumpsys::GetAppPID(active_package);
                 if (game_pid > 0) {
@@ -210,12 +215,11 @@ void encore_main_daemon(void) {
                     LOGI("Profile: Performance (PID: %d)", game_pid);
                 }
             }
-            // Skip logic idle/battery
             continue; 
         }
 
         // ===========================
-        // STATE: IDLE / DAILY
+        // STATE: IDLE
         // ===========================
         if (!last_game_package.empty()) {
         handle_game_exit:
@@ -228,18 +232,17 @@ void encore_main_daemon(void) {
             pid_tracker.invalidate();
             in_game_session = false;
             
-            // Force cek ulang profile segera setelah exit game
             idle_battery_check_counter = 100; 
         }
 
-        // Battery & Profile Check (Throttled: Cek tiap ~30 detik atau saat Wakeup/Exit Game)
+        // Battery & Profile Check
         if (++idle_battery_check_counter >= 6) {
             battery_saver_state = CheckBatterySaver();
             idle_battery_check_counter = 0;
             
             if (battery_saver_state) {
                 if (cur_mode != POWERSAVE_PROFILE) {
-                    LOGI("Profile: PowerSave (Battery Saver ON)");
+                    LOGI("Profile: PowerSave");
                     cur_mode = POWERSAVE_PROFILE;
                     apply_powersave_profile();
                 }

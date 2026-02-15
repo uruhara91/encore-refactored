@@ -19,13 +19,16 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <cstring>
+#include <cstdio>
 #include <string_view>
+#include <algorithm>
 
 namespace Dumpsys {
 
 void WindowDisplays(DumpsysWindowDisplays &result) {
     result.screen_awake = false;
     result.recent_app.clear();
+    // Optimasi memori
     result.recent_app.reserve(10); 
 
     auto pipe = popen_direct({"/system/bin/dumpsys", "window", "visible-apps"});
@@ -37,7 +40,6 @@ void WindowDisplays(DumpsysWindowDisplays &result) {
     bool exited_task_section = false;
     bool found_awake = false;
     
-    // String views (Zero-copy constants)
     constexpr std::string_view KEY_AWAKE = "mAwake=";
     constexpr std::string_view KEY_AWAKE_TRUE = "mAwake=true";
     constexpr std::string_view KEY_TASK_START = "Application tokens in top down Z order:";
@@ -55,14 +57,12 @@ void WindowDisplays(DumpsysWindowDisplays &result) {
 
         if (exited_task_section && found_awake) break;
 
-        // 1. Check Screen Awake
         if (!found_awake && line.find(KEY_AWAKE) != std::string_view::npos) {
             result.screen_awake = line.find(KEY_AWAKE_TRUE) != std::string_view::npos;
             found_awake = true;
             continue;
         }
 
-        // 2. Find Task Section
         if (!found_task_section) {
             if (line.find(KEY_TASK_START) != std::string_view::npos) {
                 found_task_section = true;
@@ -77,9 +77,9 @@ void WindowDisplays(DumpsysWindowDisplays &result) {
             continue;
         }
 
-        // 3. Parse Tasks
         if (line.find(KEY_TASK_HEADER) != std::string_view::npos) {
             if (line.find(KEY_TYPE_STANDARD) != std::string_view::npos) {
+                // std::min butuh <algorithm>
                 size_t copy_len = std::min(line.size(), sizeof(saved_task_line) - 1);
                 memcpy(saved_task_line, line.data(), copy_len);
                 saved_task_line[copy_len] = '\0';
