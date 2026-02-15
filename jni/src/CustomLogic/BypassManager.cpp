@@ -1,5 +1,7 @@
 #include "BypassManager.hpp"
-#include <filesystem> // C++17 filesystem
+#include "EncoreLog.hpp" // <-- WAJIB: Untuk LOGI/LOGE/LOGD
+#include <fstream>       // <-- WAJIB: Untuk std::ofstream
+#include <filesystem>    // C++17 filesystem
 
 void BypassManager::Init() {
     if (std::filesystem::exists(PATH_CMD)) {
@@ -25,7 +27,7 @@ void BypassManager::SetBypass(bool enable) {
     }
 
     if (mode == 0) {
-        // Format logic Anda: "0 1" on, "0 0" off
+        // Format: "0 1" (bypass on/charging off), "0 0" (bypass off/charging on)
         file << (enable ? "0 1" : "0 0");
     } else {
         file << (enable ? "1" : "0"); 
