@@ -391,8 +391,8 @@ int run_daemon() {
 
     LOGI("Initializing Custom Logic Managers...");
     BypassManager::GetInstance().Init();
-    FreezeManager::GetInstance().LoadConfig("/data/adb/modules/encore/core/freeze.txt"); 
-    ResolutionManager::GetInstance().LoadGameMap("/data/adb/modules/encore/core/games.txt"); 
+    FreezeManager::GetInstance().LoadConfig("/data/adb/.config/encore/freeze.txt");
+    ResolutionManager::GetInstance().LoadGameMap("/data/adb/.config/encore/games.txt");
 
     LOGI("Encore Tweaks daemon started");
     SetModule_DescriptionStatus("\xF0\x9F\x98\x8B Tweaks applied successfully");
