@@ -1,8 +1,9 @@
 #include "BypassManager.hpp"
 #include "EncoreLog.hpp"
-#include <fcntl.h>  // Untuk open
-#include <unistd.h> // Untuk write, close, access
-#include <cstring>  // Untuk strlen
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstring>
+#include <string_view>
 
 void BypassManager::Init() {
     // FIX: Gunakan .c_str() untuk kompatibilitas dengan access()
@@ -22,9 +23,6 @@ void BypassManager::Init() {
 void BypassManager::SetBypass(bool enable) {
     if (targetPath.empty()) return;
 
-    // OPTIMISASI: Gunakan open() syscall langsung daripada std::ofstream
-    // O_WRONLY: Hanya tulis
-    // O_CLOEXEC: Good practice di Android agar fd tidak bocor ke child process
     int fd = open(targetPath.c_str(), O_WRONLY | O_CLOEXEC);
     
     if (fd == -1) {
@@ -32,7 +30,7 @@ void BypassManager::SetBypass(bool enable) {
         return;
     }
 
-    const char* val;
+    std::string_view val;
     if (mode == 0) {
         // Mode current_cmd
         val = enable ? "0 1" : "0 0";
@@ -41,8 +39,8 @@ void BypassManager::SetBypass(bool enable) {
         val = enable ? "1" : "0";
     }
 
-    // Tulis data langsung ke kernel interface
-    ssize_t bytesWritten = write(fd, val, strlen(val));
+    // val.data() mengambil pointer char, val.size() mengambil ukuran O(1)
+    ssize_t bytesWritten = write(fd, val.data(), val.size());
     
     if (bytesWritten == -1) {
         LOGE("BypassManager: Failed to write to %s", targetPath.c_str());

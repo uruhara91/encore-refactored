@@ -218,20 +218,40 @@ void encore_main_daemon(void) {
         }
 
         // 3. GAME VALIDATION
+        bool force_exit = false;
         if (in_game_session && !active_package.empty()) {
              if (!pid_tracker.is_valid()) {
                 LOGI("Game PID dead: %s", active_package.c_str());
-                goto handle_game_exit;
+                force_exit = true;
+             } else {
+                 bool still_visible = false;
+                 for(const auto& app : window_displays.recent_app) {
+                     if(app.package_name == active_package) { still_visible = true; break; }
+                 }
+                 if (!still_visible) {
+                    LOGI("Game hidden: %s", active_package.c_str());
+                    force_exit = true;
+                 }
              }
-             
-             bool still_visible = false;
-             for(const auto& app : window_displays.recent_app) {
-                 if(app.package_name == active_package) { still_visible = true; break; }
-             }
-             if (!still_visible) {
-                LOGI("Game hidden: %s", active_package.c_str());
-                goto handle_game_exit;
-             }
+        }
+
+        if (force_exit) {
+            LOGI("Exit Game: %s", last_game_package.c_str());
+            ResolutionManager::GetInstance().ResetGameMode(last_game_package);
+            BypassManager::GetInstance().SetBypass(false);
+            
+            if (dnd_enabled_by_us) {
+                set_do_not_disturb(false);
+                dnd_enabled_by_us = false;
+                LOGI("DND Mode: OFF (Restored)");
+            }
+            
+            last_game_package = "";
+            active_package.clear();
+            pid_tracker.invalidate();
+            in_game_session = false;
+            
+            idle_battery_check_counter = 100;
         }
         
         // 4. DETECT NEW GAME
