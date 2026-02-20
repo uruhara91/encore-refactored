@@ -52,7 +52,9 @@ GameRegistry game_registry;
 
 // --- HELPERS ---
 
-void SetCpuGovernor(const std::string& governor) {
+static std::vector<std::string> cpu_governor_paths;
+
+void InitCpuGovernorPaths() {
     DIR* dir = opendir("/sys/devices/system/cpu");
     if (!dir) return;
     
@@ -62,26 +64,43 @@ void SetCpuGovernor(const std::string& governor) {
     while ((ent = readdir(dir)) != NULL) {
         if (strncmp(ent->d_name, "cpu", 3) == 0 && isdigit(ent->d_name[3])) {
             snprintf(path, sizeof(path), "/sys/devices/system/cpu/%s/cpufreq/scaling_governor", ent->d_name);
-            int fd = open(path, O_WRONLY | O_CLOEXEC);
-            if (fd >= 0) {
-                write(fd, governor.c_str(), governor.length());
-                close(fd);
+
+            if (access(path, W_OK) == 0) {
+                cpu_governor_paths.push_back(path);
             }
         }
     }
     closedir(dir);
+    LOGI("Cached %zu CPU governor paths", cpu_governor_paths.size());
+}
+
+void SetCpuGovernor(const std::string& governor) {
+    if (cpu_governor_paths.empty()) return; // Safety guard
+
+    // Langsung buka path yang sudah di-cache
+    for (const auto& path : cpu_governor_paths) {
+        int fd = open(path.c_str(), O_WRONLY | O_CLOEXEC);
+        if (fd >= 0) {
+            write(fd, governor.c_str(), governor.length());
+            close(fd);
+        }
+    }
 }
 
 bool IsCharging() {
-    int fd = open("/sys/class/power_supply/battery/status", O_RDONLY | O_CLOEXEC);
-    if (fd == -1) return false;
+    static int fd = open("/sys/class/power_supply/battery/status", O_RDONLY | O_CLOEXEC);
+    
+    // Fail-safe jika awal boot sysfs belum ready
+    if (fd == -1) {
+        fd = open("/sys/class/power_supply/battery/status", O_RDONLY | O_CLOEXEC);
+        if (fd == -1) return false;
+    }
 
     char buf[16];
-    ssize_t len = read(fd, buf, sizeof(buf) - 1);
-    close(fd);
+    ssize_t len = pread(fd, buf, sizeof(buf) - 1, 0);
 
     if (len > 0) {
-        buf[len] = 0;
+        buf[len] = '\0';
         if (strcasestr(buf, "Charging") || strcasestr(buf, "Full")) return true;
     }
     return false;
@@ -111,7 +130,8 @@ void encore_main_daemon(void) {
     auto last_full_check = std::chrono::steady_clock::now();
     
     bool in_game_session = false;
-    bool battery_saver_state = false; 
+    bool battery_saver_state = false;
+    bool dnd_enabled_by_us = false;
     PIDTracker pid_tracker;
     
     // Counter init 100 agar langsung cek saat boot
@@ -128,6 +148,7 @@ void encore_main_daemon(void) {
 
     run_perfcommon();
     pthread_setname_np(pthread_self(), "EncoreLoop");
+    InitCpuGovernorPaths();
 
     while (true) {
         // Fast Check: Module Update / Disable
@@ -200,6 +221,14 @@ void encore_main_daemon(void) {
                 LOGI("Enter Game: %s", active_package.c_str());
                 ResolutionManager::GetInstance().ApplyGameMode(active_package);
                 BypassManager::GetInstance().SetBypass(true);
+                
+                auto active_game = game_registry.find_game_ptr(active_package);
+                if (active_game && active_game->enable_dnd) {
+                    set_do_not_disturb(true);
+                    dnd_enabled_by_us = true;
+                    LOGI("DND Mode: ON");
+                }
+
                 last_game_package = active_package;
             }
 
@@ -226,6 +255,12 @@ void encore_main_daemon(void) {
             LOGI("Exit Game: %s", last_game_package.c_str());
             ResolutionManager::GetInstance().ResetGameMode(last_game_package);
             BypassManager::GetInstance().SetBypass(false);
+            
+            if (dnd_enabled_by_us) {
+                set_do_not_disturb(false);
+                dnd_enabled_by_us = false;
+                LOGI("DND Mode: OFF (Restored)");
+            }
             
             last_game_package = "";
             active_package.clear();
