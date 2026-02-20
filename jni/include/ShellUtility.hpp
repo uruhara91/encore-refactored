@@ -19,9 +19,11 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
-
+#include <cstdarg>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
 
 struct PipeResult {
     FILE* stream;
@@ -29,13 +31,14 @@ struct PipeResult {
 
     PipeResult(FILE* s, pid_t p) : stream(s), pid(p) {}
 
-    // Helper to close and reap automatically
     void close() {
         if (stream) {
             fclose(stream);
             stream = nullptr;
         }
         if (pid > 0) {
+            // OPTIMASI: Pastikan proses anak mati sebelum di-wait agar tidak blocking!
+            kill(pid, SIGKILL); 
             waitpid(pid, nullptr, 0);
             pid = -1;
         }
@@ -43,30 +46,21 @@ struct PipeResult {
 
     ~PipeResult() { close(); }
     
-    // Disable copying
     PipeResult(const PipeResult&) = delete;
     PipeResult& operator=(const PipeResult&) = delete;
     
-    // Allow moving
     PipeResult(PipeResult&& other) noexcept : stream(other.stream), pid(other.pid) {
         other.stream = nullptr;
         other.pid = -1;
     }
 };
 
-/**
- * @brief Executes a command directly and captures its standard output.
- *
- * Forks a child process and uses `execvp` to run the specified command. This approach 
- * is safer than `popen` as it avoids shell interpretation and potential injection.
- * 
- * @param args A vector where args[0] is the command and subsequent elements are arguments.
- * @return A PipeResult object. Check `PipeResult.stream` for the file pointer.
- * @note The child process is automatically reaped (waitpid) when the result goes out of scope.
- */
 inline PipeResult popen_direct(const std::vector<std::string> &args) {
     int pipefd[2];
-    if (pipe(pipefd) == -1) return PipeResult(nullptr, -1);
+    
+    // OPTIMASI: Gunakan pipe2 dengan O_CLOEXEC agar child tidak mewarisi fd ini sembarangan
+    if (pipe2(pipefd, O_CLOEXEC) == -1) return PipeResult(nullptr, -1);
+    
     pid_t pid = fork();
     if (pid == -1) {
         ::close(pipefd[0]);
@@ -75,8 +69,15 @@ inline PipeResult popen_direct(const std::vector<std::string> &args) {
     }
 
     if (pid == 0) { // Child
+        // OPTIMASI: Bungkam STDERR agar log daemon Anda bersih jika command gagal
+        int devnull = open("/dev/null", O_WRONLY | O_CLOEXEC);
+        if (devnull >= 0) {
+            dup2(devnull, STDERR_FILENO);
+            ::close(devnull);
+        }
+
         ::close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDOUT_FILENO); // STDOUT masuk ke pipe. (dup2 menghapus O_CLOEXEC, ini yang kita mau)
         ::close(pipefd[1]);
 
         std::vector<char *> cargs;
@@ -94,16 +95,6 @@ inline PipeResult popen_direct(const std::vector<std::string> &args) {
     return PipeResult(fdopen(pipefd[0], "r"), pid);
 }
 
-/**
- * @brief Executes a shell command with formatted arguments.
- *
- * This function is a wrapper around the standard `system()` call, providing `printf`-like
- * formatting for constructing the command string.
- *
- * @param format A format string as you would use with `printf`.
- * @param ... Additional arguments to be formatted into the command string.
- * @return The return value of the `system()` call.
- */
 inline int systemv(const char *format, ...) {
     char command[512];
     va_list args;
