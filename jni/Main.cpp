@@ -142,7 +142,6 @@ void encore_main_daemon(void) {
     bool dnd_enabled_by_us = false;
     PIDTracker pid_tracker;
     
-    // Counter init 100 agar langsung cek saat boot
     int idle_battery_check_counter = 100;
 
     auto GetActiveGame = [&](const std::vector<RecentAppList> &app_list) -> std::string {
@@ -159,7 +158,6 @@ void encore_main_daemon(void) {
     InitCpuGovernorPaths();
 
     while (true) {
-        // Fast Check: Module Update / Disable
         if (access(MODULE_UPDATE, F_OK) == 0) [[unlikely]] {
             LOGI("Module update detected, exiting...");
             break;
@@ -173,7 +171,6 @@ void encore_main_daemon(void) {
 
         if (elapsed < interval) {
             auto time_to_sleep = interval - elapsed;
-            
             if (time_to_sleep > std::chrono::seconds(1)) {
                 time_to_sleep = std::chrono::seconds(1);
             }
@@ -183,26 +180,26 @@ void encore_main_daemon(void) {
         
         try {
             Dumpsys::WindowDisplays(window_displays);
-            last_full_check = std::chrono::steady_clock::now(); // Update timer
+            last_full_check = std::chrono::steady_clock::now();
         } catch (...) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
-        // 2. SCREEN OFF LOGIC (Deep Sleep)
+        // 2. SCREEN OFF LOGIC
         if (!window_displays.screen_awake) {
             if (cur_mode != SCREEN_OFF_PROFILE) {
                 LOGI("Screen OFF -> Force Powersave");
                 SetCpuGovernor("powersave"); 
                 cur_mode = SCREEN_OFF_PROFILE;
                 
+                // Paksa exit game saat layar mati
                 if (!last_game_package.empty()) {
                     LOGI("Screen OFF during gaming -> Forcing Game Cleanup");
                     ResolutionManager::GetInstance().ResetGameMode(last_game_package);
                     BypassManager::GetInstance().SetBypass(false);
                     
                     if (dnd_enabled_by_us) {
-                        set_do_not_disturb(false);
                         dnd_enabled_by_us = false;
                     }
                     
@@ -212,8 +209,7 @@ void encore_main_daemon(void) {
                     in_game_session = false;
                 }
             }
-            
-            idle_battery_check_counter = 100;
+            idle_battery_check_counter = 100; 
             continue;
         }
 
@@ -241,7 +237,6 @@ void encore_main_daemon(void) {
             BypassManager::GetInstance().SetBypass(false);
             
             if (dnd_enabled_by_us) {
-                set_do_not_disturb(false);
                 dnd_enabled_by_us = false;
                 LOGI("DND Mode: OFF (Restored)");
             }
@@ -251,7 +246,7 @@ void encore_main_daemon(void) {
             pid_tracker.invalidate();
             in_game_session = false;
             
-            idle_battery_check_counter = 100;
+            idle_battery_check_counter = 100; 
         }
         
         // 4. DETECT NEW GAME
@@ -269,25 +264,22 @@ void encore_main_daemon(void) {
             if (active_package != last_game_package) {
                 LOGI("Enter Game: %s", active_package.c_str());
                 
-                // 1. Ambil state game SATU KALI saja
-                auto active_game = game_registry.find_game(active_package); // Asumsi sudah fix jadi std::optional atau copy
+                auto active_game = game_registry.find_game(active_package); 
                 bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
                 bool enable_dnd = (active_game && active_game->enable_dnd);
 
                 ResolutionManager::GetInstance().ApplyGameMode(active_package);
                 
-                // 2. LOGIC BARU: Bypass charge HANYA jika bukan Lite Mode
                 if (!lite_mode) {
                     BypassManager::GetInstance().SetBypass(true);
-                    LOGI("Bypass Charge: ON (Full Performance)");
+                    LOGI("Bypass Charge: ON");
                 } else {
-                    // Pastikan mati jika masuk game dengan profil Lite
                     BypassManager::GetInstance().SetBypass(false);
                     LOGI("Bypass Charge: OFF (Lite Mode)");
                 }
                 
                 if (enable_dnd) {
-                    set_do_not_disturb(true);
+                    // set_do_not_disturb(true);
                     dnd_enabled_by_us = true;
                     LOGI("DND Mode: ON");
                 }
@@ -299,8 +291,6 @@ void encore_main_daemon(void) {
                 pid_t game_pid = Dumpsys::GetAppPID(active_package);
                 if (game_pid > 0) {
                     cur_mode = PERFORMANCE_PROFILE;
-                    
-                    // Kita kueri ulang di sini aman karena sangat cepat (zero overhead)
                     auto active_game = game_registry.find_game(active_package);
                     bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
                     
@@ -309,33 +299,12 @@ void encore_main_daemon(void) {
                     LOGI("Profile: Performance (PID: %d)", game_pid);
                 }
             }
-            continue; 
+            continue;
         }
 
         // ===========================
-        // STATE: IDLE
+        // STATE: IDLE (Battery Check)
         // ===========================
-        if (!last_game_package.empty()) {
-        handle_game_exit:
-            LOGI("Exit Game: %s", last_game_package.c_str());
-            ResolutionManager::GetInstance().ResetGameMode(last_game_package);
-            BypassManager::GetInstance().SetBypass(false);
-            
-            if (dnd_enabled_by_us) {
-                set_do_not_disturb(false);
-                dnd_enabled_by_us = false;
-                LOGI("DND Mode: OFF (Restored)");
-            }
-            
-            last_game_package = "";
-            active_package.clear();
-            pid_tracker.invalidate();
-            in_game_session = false;
-            
-            idle_battery_check_counter = 100; 
-        }
-
-        // Battery & Profile Check
         if (++idle_battery_check_counter >= 6) {
             battery_saver_state = CheckBatterySaver();
             idle_battery_check_counter = 0;
