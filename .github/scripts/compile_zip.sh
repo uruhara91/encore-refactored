@@ -24,9 +24,11 @@ cp -r ./libs module
 cp -r ./scripts/* module/system/bin
 cp gamelist.txt module
 cp games.txt module
-cp device_mitigation.json module
 cp LICENSE module
 cp NOTICE.md module
+
+# Download banner image
+wget -O module/banner.webp https://encore.rem01gaming.dev/ogp/default.webp
 
 # Remove .sh extension from scripts
 find module/system/bin -maxdepth 1 -type f -name "*.sh" -exec sh -c 'mv -- "$0" "${0%.sh}"' {} \;
@@ -38,12 +40,12 @@ echo "zipName=$zipName" >>"$GITHUB_OUTPUT"
 # Generate sha256sum for integrity checkup
 bash .github/scripts/gen_sha256sum.sh "module"
 
-# Zip the file
 cd ./module || {
 	echo "Unable to cd to ./module" >&2
 	exit 1
 }
 
+# Zip the file
 zip -r9 ../"$zipName" * -x *placeholder* *.map .shellcheckrc
 zip -z ../"$zipName" <<EOF
 $version-$release_code
