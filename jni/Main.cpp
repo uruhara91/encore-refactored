@@ -195,12 +195,25 @@ void encore_main_daemon(void) {
                 LOGI("Screen OFF -> Force Powersave");
                 SetCpuGovernor("powersave"); 
                 cur_mode = SCREEN_OFF_PROFILE;
+                
+                if (!last_game_package.empty()) {
+                    LOGI("Screen OFF during gaming -> Forcing Game Cleanup");
+                    ResolutionManager::GetInstance().ResetGameMode(last_game_package);
+                    BypassManager::GetInstance().SetBypass(false);
+                    
+                    if (dnd_enabled_by_us) {
+                        set_do_not_disturb(false);
+                        dnd_enabled_by_us = false;
+                    }
+                    
+                    last_game_package = "";
+                    active_package.clear();
+                    pid_tracker.invalidate();
+                    in_game_session = false;
+                }
             }
-            // Sleep panjang biar masuk Doze
-            std::this_thread::sleep_for(NORMAL_LOOP_INTERVAL);
             
-            // WAKEUP SIGNAL: Saat bangun, paksa cek profile segera
-            idle_battery_check_counter = 100; 
+            idle_battery_check_counter = 100;
             continue;
         }
 
