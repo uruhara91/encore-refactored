@@ -108,10 +108,10 @@ bool IsCharging() {
 
 bool CheckBatterySaver() {
     if (IsCharging()) return false;
+    
     try {
-        DumpsysPower dumpsys_power;
-        Dumpsys::Power(dumpsys_power);
-        return dumpsys_power.battery_saver;
+        std::string output = ShellUtility::Execute("cmd power is-power-save-mode");
+        return (output.find("true") != std::string::npos);
     } catch (...) {
         return false;
     }
@@ -160,16 +160,24 @@ void encore_main_daemon(void) {
         auto now = std::chrono::steady_clock::now();
         
         // 1. WINDOW SCAN
-        if ((now - last_full_check) >= (in_game_session ? INGAME_LOOP_INTERVAL : NORMAL_LOOP_INTERVAL)) {
-            try {
-                Dumpsys::WindowDisplays(window_displays);
-                last_full_check = now;
-            } catch (...) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                continue;
+        auto interval = in_game_session ? INGAME_LOOP_INTERVAL : NORMAL_LOOP_INTERVAL;
+        auto elapsed = now - last_full_check;
+
+        if (elapsed < interval) {
+            auto time_to_sleep = interval - elapsed;
+            
+            if (time_to_sleep > std::chrono::seconds(1)) {
+                time_to_sleep = std::chrono::seconds(1);
             }
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            std::this_thread::sleep_for(time_to_sleep);
+            continue;
+        }
+        
+        try {
+            Dumpsys::WindowDisplays(window_displays);
+            last_full_check = std::chrono::steady_clock::now(); // Update timer
+        } catch (...) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
@@ -219,11 +227,25 @@ void encore_main_daemon(void) {
         if (!active_package.empty() && window_displays.screen_awake) {
             if (active_package != last_game_package) {
                 LOGI("Enter Game: %s", active_package.c_str());
-                ResolutionManager::GetInstance().ApplyGameMode(active_package);
-                BypassManager::GetInstance().SetBypass(true);
                 
-                auto active_game = game_registry.find_game_ptr(active_package);
-                if (active_game && active_game->enable_dnd) {
+                // 1. Ambil state game SATU KALI saja
+                auto active_game = game_registry.find_game(active_package); // Asumsi sudah fix jadi std::optional atau copy
+                bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
+                bool enable_dnd = (active_game && active_game->enable_dnd);
+
+                ResolutionManager::GetInstance().ApplyGameMode(active_package);
+                
+                // 2. LOGIC BARU: Bypass charge HANYA jika bukan Lite Mode
+                if (!lite_mode) {
+                    BypassManager::GetInstance().SetBypass(true);
+                    LOGI("Bypass Charge: ON (Full Performance)");
+                } else {
+                    // Pastikan mati jika masuk game dengan profil Lite
+                    BypassManager::GetInstance().SetBypass(false);
+                    LOGI("Bypass Charge: OFF (Lite Mode)");
+                }
+                
+                if (enable_dnd) {
                     set_do_not_disturb(true);
                     dnd_enabled_by_us = true;
                     LOGI("DND Mode: ON");
@@ -236,7 +258,9 @@ void encore_main_daemon(void) {
                 pid_t game_pid = Dumpsys::GetAppPID(active_package);
                 if (game_pid > 0) {
                     cur_mode = PERFORMANCE_PROFILE;
-                    auto active_game = game_registry.find_game_ptr(active_package);
+                    
+                    // Kita kueri ulang di sini aman karena sangat cepat (zero overhead)
+                    auto active_game = game_registry.find_game(active_package);
                     bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
                     
                     apply_performance_profile(lite_mode, active_package, game_pid);
