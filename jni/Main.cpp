@@ -84,7 +84,7 @@ void encore_main_daemon(void) {
     struct pollfd pfd;
     pfd.fd = log_fd;
     pfd.events = POLLIN;
-    char log_buf[512];
+    char log_buf[1024];
 
     while (true) {
         if (access(MODULE_UPDATE, F_OK) == 0) [[unlikely]] {
@@ -231,7 +231,6 @@ void encore_main_daemon(void) {
                 }
 
                 pid_t game_pid = GetAppPID_Fast(active_package);
-                
                 int retries = 0;
                 while (game_pid <= 0 && retries < 10) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(50));

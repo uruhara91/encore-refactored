@@ -50,6 +50,8 @@ pid_t GetAppPID_Fast(const std::string& targetPkg) {
             ssize_t len = read(fd, cmdlineBuf, sizeof(cmdlineBuf) - 1);
             close(fd);
             if (len > 0) {
+                cmdlineBuf[len] = '\0'; 
+                
                 if (strcmp(cmdlineBuf, targetPkg.c_str()) == 0) {
                     found_pid = atoi(ent->d_name);
                     break;

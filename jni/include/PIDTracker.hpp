@@ -32,9 +32,9 @@
 class PIDTracker {
 private:
     /// Loop interval when there's no PID is being tracked.
-    static constexpr auto LOOP_INTERVAL_IDLE = std::chrono::milliseconds(300);
+    static constexpr auto LOOP_INTERVAL_IDLE = std::chrono::milliseconds(1500);
     /// Loop interval when there's PID is being tracked.
-    static constexpr auto LOOP_INTERVAL_BUSY = std::chrono::milliseconds(20);
+    static constexpr auto LOOP_INTERVAL_BUSY = std::chrono::milliseconds(1000);
 
     /// The current process ID being tracked.
     std::atomic<pid_t> current_pid{0};
