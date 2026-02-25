@@ -61,7 +61,6 @@ void encore_main_daemon(void) {
     
     bool in_game_session = false;
     bool battery_saver_state = false;
-    bool dnd_enabled_by_us = false;
     PIDTracker pid_tracker;
     
     int idle_battery_check_counter = 100;
@@ -193,7 +192,6 @@ void encore_main_daemon(void) {
                 
                 LOGI("[TRACE-MAIN] Memaksa DND OFF karena keluar dari game.");
                 set_do_not_disturb(false); 
-                dnd_enabled_by_us = false;
                 
                 last_game_package = "";
             }
@@ -261,10 +259,8 @@ void encore_main_daemon(void) {
                     if (enable_dnd) {
                         LOGI("[TRACE-MAIN] Memanggil DND ON (Priority)");
                         set_do_not_disturb(true);
-                        dnd_enabled_by_us = true;
                     } else {
                         set_do_not_disturb(false);
-                        dnd_enabled_by_us = false;
                     }
 
                     cur_mode = PERFORMANCE_PROFILE;
