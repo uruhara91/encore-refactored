@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
+#include <cstring>
+#include <cctype>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
 #include "EncoreUtility.hpp"
 #include <ModuleProperty.hpp>
 #include <ShellUtility.hpp>
