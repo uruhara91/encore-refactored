@@ -130,28 +130,27 @@ void encore_main_daemon(void) {
                     continue;
                 }
 
-            do {
+                do {
                 std::string line(log_buf);
                 size_t start = line.find(',');
                 size_t end = line.find('/');
                 
                 if (start != std::string::npos && end != std::string::npos && end > start) {
-                    std::string pkg = line.substr(start + 1, end - start - 1);
+                    std::string_view pkg_view(line.c_str() + start + 1, end - start - 1);
                     
-                    size_t first = pkg.find_first_not_of(" \t\r\n[");
-                    if (first == std::string::npos) {
-                        pkg.clear();
-                    } else {
-                        pkg.erase(0, first);
-                        size_t last = pkg.find_last_not_of(" \t\r\n]");
-                        if (last != std::string::npos) {
-                            pkg.erase(last + 1);
+                    size_t first = pkg_view.find_first_not_of(" \t\r\n[");
+                    if (first != std::string_view::npos) {
+                        pkg_view.remove_prefix(first);
+                        
+                        size_t last = pkg_view.find_last_not_of(" \t\r\n]");
+                        if (last != std::string_view::npos) {
+                            pkg_view.remove_suffix(pkg_view.length() - last - 1);
                         }
-                    }
-                    
-                    if (!pkg.empty()) {
-                        new_fg_app = pkg;
-                        app_changed = true;
+                        
+                        if (!pkg_view.empty()) {
+                            new_fg_app = std::string(pkg_view);
+                            app_changed = true;
+                        }
                     }
                 }
             } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
@@ -209,6 +208,8 @@ void encore_main_daemon(void) {
         // ===========================
         if (in_game_session && !active_package.empty()) {
             if (active_package != last_game_package) {
+                
+                LOGD("Logcat detected game: %s. Fetching PID...", active_package.c_str());
                 pid_t game_pid = GetAppPID_Fast(active_package);
                 int retries = 0;
                 while (game_pid <= 0 && retries < 10) {
@@ -217,7 +218,33 @@ void encore_main_daemon(void) {
                     retries++;
                 }
 
+                bool is_truly_foreground = false;
                 if (game_pid > 0) {
+                    int oom_retries = 0;
+                    while (oom_retries < 6) {
+                        if (IsPidTrulyForeground(game_pid)) {
+                            is_truly_foreground = true;
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                        oom_retries++;
+                    }
+                    
+                    if (!is_truly_foreground) {
+                        char path[64], buf[16];
+                        snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", game_pid);
+                        int fd = open(path, O_RDONLY | O_CLOEXEC);
+                        if (fd >= 0) {
+                            ssize_t len = read(fd, buf, sizeof(buf) - 1);
+                            if (len > 0) { buf[len] = '\0'; LOGW("OOM Score rejected: %s", buf); }
+                            close(fd);
+                        }
+                    }
+                } else {
+                    LOGW("Failed to fetch PID after 500ms");
+                }
+                
+                if (game_pid > 0 && is_truly_foreground) {
                     if (!last_game_package.empty()) {
                         LOGI("Switching games! Resetting previous game: %s", last_game_package.c_str());
                         ResolutionManager::GetInstance().ResetGameMode(last_game_package);
@@ -249,7 +276,7 @@ void encore_main_daemon(void) {
 
                     last_game_package = active_package;
                 } else {
-                    LOGW("Fake resume ignored (No PID): %s", active_package.c_str());
+                    LOGW("Fake resume ignored (App in Recents/Dying): %s", active_package.c_str());
                     active_package.clear();
                     in_game_session = false;
                 }
