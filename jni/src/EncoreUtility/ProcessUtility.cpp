@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include "EncoreUtility.hpp"
+#include <EncoreLog.hpp>
 
 uid_t get_uid_by_package_name(const std::string &package_name) {
     struct stat st{};
@@ -68,7 +69,10 @@ bool IsPidTrulyForeground(pid_t pid) {
     char path[64];
     snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", pid);
     int fd = open(path, O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return false;
+    if (fd < 0) {
+        LOGE("[TRACE-OOM] Gagal buka oom_score_adj untuk PID %d", pid);
+        return false;
+    }
     
     char buf[16];
     ssize_t len = read(fd, buf, sizeof(buf) - 1);
@@ -76,7 +80,9 @@ bool IsPidTrulyForeground(pid_t pid) {
     
     if (len > 0) {
         buf[len] = '\0';
-        return atoi(buf) <= 0; 
+        int score = atoi(buf);
+        LOGI("[TRACE-OOM] PID %d punya skor OOM: %d", pid, score); // <--- KITA INTIP SKORNYA DI SINI
+        return score <= 0; 
     }
     return false;
 }

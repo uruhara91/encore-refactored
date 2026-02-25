@@ -209,7 +209,8 @@ void encore_main_daemon(void) {
         if (in_game_session && !active_package.empty()) {
             if (active_package != last_game_package) {
                 
-                LOGD("Logcat detected game: %s. Fetching PID...", active_package.c_str());
+                LOGI("[TRACE-MAIN] 1. Logcat terpicu untuk: %s", active_package.c_str());
+                
                 pid_t game_pid = GetAppPID_Fast(active_package);
                 int retries = 0;
                 while (game_pid <= 0 && retries < 10) {
@@ -218,12 +219,16 @@ void encore_main_daemon(void) {
                     retries++;
                 }
 
+                LOGI("[TRACE-MAIN] 2. PID didapat: %d (Butuh retries: %d)", game_pid, retries);
+
                 bool is_truly_foreground = false;
                 if (game_pid > 0) {
                     int oom_retries = 0;
                     while (oom_retries < 6) {
+                        LOGI("[TRACE-MAIN] Mengecek OOM percobaan ke-%d...", oom_retries);
                         if (IsPidTrulyForeground(game_pid)) {
                             is_truly_foreground = true;
+                            LOGI("[TRACE-MAIN] 3. HASIL: PID %d Valid Foreground (0)!", game_pid);
                             break;
                         }
                         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -231,20 +236,12 @@ void encore_main_daemon(void) {
                     }
                     
                     if (!is_truly_foreground) {
-                        char path[64], buf[16];
-                        snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", game_pid);
-                        int fd = open(path, O_RDONLY | O_CLOEXEC);
-                        if (fd >= 0) {
-                            ssize_t len = read(fd, buf, sizeof(buf) - 1);
-                            if (len > 0) { buf[len] = '\0'; LOGW("OOM Score rejected: %s", buf); }
-                            close(fd);
-                        }
+                        LOGW("[TRACE-MAIN] 3. HASIL: PID %d DITOLAK! Skor OOM bukan 0.", game_pid);
                     }
-                } else {
-                    LOGW("Failed to fetch PID after 500ms");
                 }
-                
+
                 if (game_pid > 0 && is_truly_foreground) {
+                    LOGI("[TRACE-MAIN] 4. EKSEKUSI PROFIL DAN DND DIJALANKAN!");
                     if (!last_game_package.empty()) {
                         LOGI("Switching games! Resetting previous game: %s", last_game_package.c_str());
                         ResolutionManager::GetInstance().ResetGameMode(last_game_package);
@@ -265,6 +262,7 @@ void encore_main_daemon(void) {
                     }
                     
                     if (enable_dnd) {
+                        LOGI("[TRACE-MAIN] Memanggil set_do_not_disturb(true)");
                         set_do_not_disturb(true);
                         dnd_enabled_by_us = true;
                     }
@@ -276,7 +274,7 @@ void encore_main_daemon(void) {
 
                     last_game_package = active_package;
                 } else {
-                    LOGW("Fake resume ignored (App in Recents/Dying): %s", active_package.c_str());
+                    LOGW("[TRACE-MAIN] 4. EKSEKUSI DIBATALKAN (Fake Resume): %s", active_package.c_str());
                     active_package.clear();
                     in_game_session = false;
                 }
