@@ -52,8 +52,6 @@ GameRegistry game_registry;
 
 // --- HELPERS ---
 
-static std::vector<std::string> cpu_governor_paths;
-
 void encore_main_daemon(void) {
     constexpr auto NORMAL_LOOP_INTERVAL_MS = 5000;
     constexpr auto INGAME_LOOP_INTERVAL_MS = 1000;
@@ -102,13 +100,17 @@ void encore_main_daemon(void) {
 
         if (ret > 0 && (pfd.revents & POLLIN)) {
             if (fgets(log_buf, sizeof(log_buf), log_pipe) == nullptr) {
-                LOGE("Logcat pipe broken! Restarting...");
-                pclose(log_pipe);
-                log_pipe = popen("/system/bin/logcat -b events -v raw -s wm_set_resumed_activity am_set_resumed_activity", "r");
-                if (log_pipe) {
-                    log_fd = fileno(log_pipe);
-                    fcntl(log_fd, F_SETFL, fcntl(log_fd, F_GETFL) | O_NONBLOCK);
-                    pfd.fd = log_fd;
+                if (feof(log_pipe)) {
+                    LOGE("Logcat pipe broken! Restarting...");
+                    pclose(log_pipe);
+                    log_pipe = popen("/system/bin/logcat -b events -v raw -s wm_set_resumed_activity am_set_resumed_activity", "r");
+                    if (log_pipe) {
+                        log_fd = fileno(log_pipe);
+                        fcntl(log_fd, F_SETFL, fcntl(log_fd, F_GETFL) | O_NONBLOCK);
+                        pfd.fd = log_fd;
+                    }
+                } else {
+                    clearerr(log_pipe);
                 }
                 continue;
             }
@@ -138,6 +140,8 @@ void encore_main_daemon(void) {
                     }
                 }
             } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
+            
+            clearerr(log_pipe);
         }
 
         if (app_changed) {

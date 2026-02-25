@@ -18,6 +18,8 @@
 #include <ModuleProperty.hpp>
 #include <ShellUtility.hpp>
 
+static std::vector<std::string> cpu_governor_paths;
+
 void InitCpuGovernorPaths() {
     DIR* dir = opendir("/sys/devices/system/cpu");
     if (!dir) return;
