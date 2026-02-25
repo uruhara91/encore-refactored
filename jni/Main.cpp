@@ -88,15 +88,12 @@ void SetCpuGovernor(const std::string& governor) {
 }
 
 bool IsCharging() {
-    static int fd = open("/sys/class/power_supply/battery/status", O_RDONLY | O_CLOEXEC);
-    
-    if (fd == -1) {
-        fd = open("/sys/class/power_supply/battery/status", O_RDONLY | O_CLOEXEC);
-        if (fd == -1) return false;
-    }
+    int fd = open("/sys/class/power_supply/battery/status", O_RDONLY | O_CLOEXEC);
+    if (fd == -1) return false;
 
     char buf[16];
-    ssize_t len = pread(fd, buf, sizeof(buf) - 1, 0);
+    ssize_t len = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
 
     if (len > 0) {
         buf[len] = '\0';
@@ -196,13 +193,14 @@ void encore_main_daemon(void) {
 
         int timeout_ms = in_game_session ? INGAME_LOOP_INTERVAL_MS : NORMAL_LOOP_INTERVAL_MS;
         
-        // 2. DAEMON TERTIDUR PULAS DI SINI (0% CPU STUTTER-FREE)
+        // 2. DAEMON TERTIDUR PULAS
         int ret = poll(&pfd, 1, timeout_ms);
 
         bool app_changed = false;
         std::string new_fg_app = active_package;
 
         if (ret > 0 && (pfd.revents & POLLIN)) {
+            // 1. Cek apakah pipe putus (EOF)
             if (fgets(log_buf, sizeof(log_buf), log_pipe) == nullptr) {
                 LOGE("Logcat pipe broken! Restarting...");
                 pclose(log_pipe);
@@ -217,40 +215,32 @@ void encore_main_daemon(void) {
 
             do {
                 std::string line(log_buf);
-                // ... [Logika parsing string SAFE TRIM Anda di sini] ...
-            } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
-
-            while (fgets(log_buf, sizeof(log_buf), log_pipe)) {
-                std::string line(log_buf);
                 
                 size_t start = line.find(',');
                 size_t end = line.find('/');
                 
                 if (start != std::string::npos && end != std::string::npos && end > start) {
                     std::string pkg = line.substr(start + 1, end - start - 1);
-                    if (start != std::string::npos && end != std::string::npos && end > start) {
-                        std::string pkg = line.substr(start + 1, end - start - 1);
-                        
-                        // SAFE TRIM KIRI
-                        size_t first = pkg.find_first_not_of(" \t\r\n[");
-                        if (first == std::string::npos) {
-                            pkg.clear();
-                        } else {
-                            pkg.erase(0, first);
-                            // SAFE TRIM KANAN
-                            size_t last = pkg.find_last_not_of(" \t\r\n]");
-                            if (last != std::string::npos) {
-                                pkg.erase(last + 1);
-                            }
-                        }
-                        
-                        if (!pkg.empty()) {
-                            new_fg_app = pkg;
-                            app_changed = true;
+                    
+                    // SAFE TRIM KIRI
+                    size_t first = pkg.find_first_not_of(" \t\r\n[");
+                    if (first == std::string::npos) {
+                        pkg.clear();
+                    } else {
+                        pkg.erase(0, first);
+                        // SAFE TRIM KANAN
+                        size_t last = pkg.find_last_not_of(" \t\r\n]");
+                        if (last != std::string::npos) {
+                            pkg.erase(last + 1);
                         }
                     }
+                    
+                    if (!pkg.empty()) {
+                        new_fg_app = pkg;
+                        app_changed = true;
+                    }
                 }
-            }
+            } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
         }
 
         if (app_changed) {
