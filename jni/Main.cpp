@@ -165,21 +165,19 @@ void encore_main_daemon(void) {
                 in_game_session = true;
             } else {
                 active_package.clear(); 
-                in_game_session = false; // WAJIB ADA INI
+                in_game_session = false;
             }
         }
 
         bool force_exit = false;
 
-        // Cek PID MATI HANYA JIKA app tidak baru saja berganti
         if (!app_changed && in_game_session && !active_package.empty()) {
             if (!pid_tracker.is_valid()) {
-                LOGI("Game PID dead (Force Close): {}", active_package); // Perbaikan {}
+                LOGI("Game PID dead (Force Close): {}", active_package);
                 force_exit = true;
             }
         }
         
-        // Jika berganti ke non-game, picu force exit
         if (app_changed && active_package.empty() && !last_game_package.empty()) {
             force_exit = true;
         }
@@ -189,18 +187,17 @@ void encore_main_daemon(void) {
         // ===========================
         if (force_exit) {
             if (!last_game_package.empty()) {
-                LOGI("Exit Game: {}", last_game_package); // Perbaikan {}
+                LOGI("Exit Game: {}", last_game_package);
                 ResolutionManager::GetInstance().ResetGameMode(last_game_package);
                 BypassManager::GetInstance().SetBypass(false);
                 
-                if (dnd_enabled_by_us) {
-                    dnd_enabled_by_us = false;
-                    set_do_not_disturb(false);
-                }
+                LOGI("[TRACE-MAIN] Memaksa DND OFF karena keluar dari game.");
+                set_do_not_disturb(false); 
+                dnd_enabled_by_us = false;
+                
                 last_game_package = "";
             }
             
-            // Wajib dibersihkan secara total meski last_game_package kosong
             active_package.clear();
             pid_tracker.invalidate();
             in_game_session = false;
@@ -217,7 +214,6 @@ void encore_main_daemon(void) {
             LOGI("[TRACE-MAIN] Logcat terpicu untuk: {}", active_package);
             
             pid_t game_pid = GetAppPID_Fast(active_package);
-            // Retry cepat untuk Cold Start (max 50ms x 10)
             for (int i = 0; i < 10 && game_pid <= 0; i++) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 game_pid = GetAppPID_Fast(active_package);
@@ -230,31 +226,27 @@ void encore_main_daemon(void) {
                 for (int i = 0; i < 8; i++) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     
-                    // 1. Cek apakah PID masih ada
                     if (kill(game_pid, 0) != 0) {
-                        LOGW("[TRACE-MAIN] PID {} mendadak hilang di detik ke-0.{}", game_pid, i+1);
+                        LOGW("[TRACE-MAIN] PID {} hilang.", game_pid);
                         is_stable = false; break;
                     }
-                    
-                    // 2. Cek apakah sudah jadi Zombie (Defunct)
                     if (IsProcessZombie(game_pid)) {
-                        LOGW("[TRACE-MAIN] PID {} berubah jadi Zombie!", game_pid);
+                        LOGW("[TRACE-MAIN] PID {} Zombie.", game_pid);
                         is_stable = false; break;
                     }
-
-                    // 3. Cek OOM Score (Harus Foreground/0)
                     if (!IsPidTrulyForeground(game_pid)) {
-                        LOGW("[TRACE-MAIN] PID {} OOM Score naik (Background/Dying)!", game_pid);
+                        LOGW("[TRACE-MAIN] PID {} OOM naik.", game_pid);
                         is_stable = false; break;
                     }
                 }
 
                 if (is_stable) {
-                    LOGI("[TRACE-MAIN] PID {} Stabil & Valid! Masuk Game.", game_pid);
+                    LOGI("[TRACE-MAIN] PID {} Stabil! Masuk Game.", game_pid);
                     
                     if (!last_game_package.empty()) {
                         LOGI("Switching games! Resetting previous: {}", last_game_package);
                         ResolutionManager::GetInstance().ResetGameMode(last_game_package);
+                        set_do_not_disturb(false);
                     }
 
                     LOGI("Enter Game: {}", active_package);
@@ -264,16 +256,15 @@ void encore_main_daemon(void) {
                     bool enable_dnd = (active_game && active_game->enable_dnd);
 
                     ResolutionManager::GetInstance().ApplyGameMode(active_package);
-                    
-                    if (!lite_mode) {
-                        BypassManager::GetInstance().SetBypass(true);
-                    } else {
-                        BypassManager::GetInstance().SetBypass(false);
-                    }
+                    BypassManager::GetInstance().SetBypass(!lite_mode);
                     
                     if (enable_dnd) {
+                        LOGI("[TRACE-MAIN] Memanggil DND ON (Priority)");
                         set_do_not_disturb(true);
                         dnd_enabled_by_us = true;
+                    } else {
+                        set_do_not_disturb(false);
+                        dnd_enabled_by_us = false;
                     }
 
                     cur_mode = PERFORMANCE_PROFILE;

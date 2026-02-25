@@ -94,28 +94,12 @@ bool CheckBatterySaver() {
     }
 }
 
-static void run_async_cmd(const char* args[]) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        if (fork() == 0) {
-            int devnull = open("/dev/null", O_WRONLY);
-            if (devnull >= 0) {
-                dup2(devnull, STDOUT_FILENO);
-                dup2(devnull, STDERR_FILENO);
-                close(devnull);
-            }
-            execvp(args[0], (char *const *)args);
-            _exit(127);
-        }
-        _exit(0); 
-    } else if (pid > 0) {
-        waitpid(pid, NULL, 0); 
-    }
-}
-
 void set_do_not_disturb(bool do_not_disturb) {
-    const char *args[] = {"/system/bin/cmd", "notification", "set_dnd", do_not_disturb ? "priority" : "off", NULL};
-    run_async_cmd(args);
+    if (do_not_disturb) {
+        systemv("/system/bin/cmd notification set_dnd priority");
+    } else {
+        systemv("/system/bin/cmd notification set_dnd off");
+    }
 }
 
 void notify(const char *message) {
