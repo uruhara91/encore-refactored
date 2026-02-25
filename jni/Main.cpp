@@ -92,28 +92,45 @@ void encore_main_daemon(void) {
             break;
         }
 
+        if (!log_pipe) {
+            log_pipe = popen("/system/bin/logcat -b events -v raw -s wm_set_resumed_activity am_set_resumed_activity", "r");
+            if (log_pipe) {
+                log_fd = fileno(log_pipe);
+                fcntl(log_fd, F_SETFL, fcntl(log_fd, F_GETFL) | O_NONBLOCK);
+                pfd.fd = log_fd;
+            } else {
+                pfd.fd = -1;
+            }
+        }
+
         int timeout_ms = in_game_session ? INGAME_LOOP_INTERVAL_MS : NORMAL_LOOP_INTERVAL_MS;
         int ret = poll(&pfd, 1, timeout_ms);
+
+        if (ret < 0 && errno == EINTR) continue; 
 
         bool app_changed = false;
         std::string new_fg_app = active_package;
 
-        if (ret > 0 && (pfd.revents & POLLIN)) {
-            if (fgets(log_buf, sizeof(log_buf), log_pipe) == nullptr) {
-                if (feof(log_pipe)) {
-                    LOGE("Logcat pipe broken! Restarting...");
-                    pclose(log_pipe);
-                    log_pipe = popen("/system/bin/logcat -b events -v raw -s wm_set_resumed_activity am_set_resumed_activity", "r");
-                    if (log_pipe) {
-                        log_fd = fileno(log_pipe);
-                        fcntl(log_fd, F_SETFL, fcntl(log_fd, F_GETFL) | O_NONBLOCK);
-                        pfd.fd = log_fd;
-                    }
-                } else {
-                    clearerr(log_pipe);
-                }
+        if (ret > 0) {
+            if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                LOGE("Logcat pipe error/hup! Restarting...");
+                if (log_pipe) { pclose(log_pipe); log_pipe = nullptr; }
+                pfd.fd = -1;
                 continue;
             }
+
+            if (pfd.revents & POLLIN) {
+                if (fgets(log_buf, sizeof(log_buf), log_pipe) == nullptr) {
+                    if (feof(log_pipe)) {
+                        LOGE("Logcat pipe EOF! Restarting...");
+                        pclose(log_pipe);
+                        log_pipe = nullptr;
+                        pfd.fd = -1;
+                    } else {
+                        clearerr(log_pipe);
+                    }
+                    continue;
+                }
 
             do {
                 std::string line(log_buf);
@@ -140,8 +157,9 @@ void encore_main_daemon(void) {
                     }
                 }
             } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
-            
-            clearerr(log_pipe);
+
+                clearerr(log_pipe);
+            }
         }
 
         if (app_changed) {

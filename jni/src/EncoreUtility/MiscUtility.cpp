@@ -74,13 +74,17 @@ bool CheckBatterySaver() {
         std::vector<std::string> args = {"/system/bin/cmd", "power", "is-power-save-mode"};
         PipeResult pipe_res = popen_direct(args);
         
+        bool is_saving = false;
         if (pipe_res.stream != nullptr) {
             char buf[32];
             if (fgets(buf, sizeof(buf), pipe_res.stream) != nullptr) {
-                return (strcasestr(buf, "true") != nullptr);
+                is_saving = (strcasestr(buf, "true") != nullptr);
             }
+            
+            fclose(pipe_res.stream);
+            waitpid(pipe_res.pid, nullptr, 0); 
         }
-        return false;
+        return is_saving;
     } catch (...) {
         return false;
     }
