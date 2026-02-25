@@ -165,36 +165,42 @@ void encore_main_daemon(void) {
                 in_game_session = true;
             } else {
                 active_package.clear(); 
+                in_game_session = false; // WAJIB ADA INI
             }
         }
 
         bool force_exit = false;
 
-        if (in_game_session && !active_package.empty()) {
+        // Cek PID MATI HANYA JIKA app tidak baru saja berganti
+        if (!app_changed && in_game_session && !active_package.empty()) {
             if (!pid_tracker.is_valid()) {
-                LOGI("Game PID dead (Force Close): %s", active_package.c_str());
+                LOGI("Game PID dead (Force Close): {}", active_package); // Perbaikan {}
                 force_exit = true;
             }
         }
         
-        if (app_changed && active_package != last_game_package && active_package.empty()) {
+        // Jika berganti ke non-game, picu force exit
+        if (app_changed && active_package.empty() && !last_game_package.empty()) {
             force_exit = true;
         }
 
         // ===========================
         // EXIT GAME
         // ===========================
-        if (force_exit && !last_game_package.empty()) {
-            LOGI("Exit Game: %s", last_game_package.c_str());
-            ResolutionManager::GetInstance().ResetGameMode(last_game_package);
-            BypassManager::GetInstance().SetBypass(false);
-            
-            if (dnd_enabled_by_us) {
-                dnd_enabled_by_us = false;
-                set_do_not_disturb(false);
+        if (force_exit) {
+            if (!last_game_package.empty()) {
+                LOGI("Exit Game: {}", last_game_package); // Perbaikan {}
+                ResolutionManager::GetInstance().ResetGameMode(last_game_package);
+                BypassManager::GetInstance().SetBypass(false);
+                
+                if (dnd_enabled_by_us) {
+                    dnd_enabled_by_us = false;
+                    set_do_not_disturb(false);
+                }
+                last_game_package = "";
             }
             
-            last_game_package = "";
+            // Wajib dibersihkan secara total meski last_game_package kosong
             active_package.clear();
             pid_tracker.invalidate();
             in_game_session = false;
@@ -206,47 +212,37 @@ void encore_main_daemon(void) {
         // ===========================
         // ENTER GAME
         // ===========================
-        if (in_game_session && !active_package.empty()) {
-            if (active_package != last_game_package) {
+        if (in_game_session && !active_package.empty() && active_package != last_game_package) {
+            
+            LOGI("[TRACE-MAIN] Logcat terpicu untuk: {}", active_package);
+            
+            pid_t game_pid = GetAppPID_Fast(active_package);
+            int retries = 0;
+            while (game_pid <= 0 && retries < 10) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                game_pid = GetAppPID_Fast(active_package);
+                retries++;
+            }
+
+            if (game_pid > 0) {
+                LOGI("[TRACE-MAIN] PID didapat: {} (Tunggu 400ms...)", game_pid);
                 
-                LOGI("[TRACE-MAIN] 1. Logcat terpicu untuk: %s", active_package.c_str());
+                // THE ULTIMATE FIX: Jeda 500ms.
+                // Biarkan Android menyelesaikan animasi Swipe/Kill di Recent Apps.
+                // Jika ini adalah jebakan swipe, proses PASTI sudah lenyap/dibunuh dalam 500ms ini.
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 
-                pid_t game_pid = GetAppPID_Fast(active_package);
-                int retries = 0;
-                while (game_pid <= 0 && retries < 10) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    game_pid = GetAppPID_Fast(active_package);
-                    retries++;
-                }
-
-                LOGI("[TRACE-MAIN] 2. PID didapat: %d (Butuh retries: %d)", game_pid, retries);
-
-                bool is_truly_foreground = false;
-                if (game_pid > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(150));
-
-                    int oom_retries = 0;
-                    while (oom_retries < 10) {
-                        if (IsPidTrulyForeground(game_pid)) {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                            if (IsPidTrulyForeground(game_pid)) {
-                                is_truly_foreground = true;
-                                break;
-                            }
-                        }
-                        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                        oom_retries++;
-                    }
-                }
-
-                if (game_pid > 0 && is_truly_foreground) {
-                    LOGI("[TRACE-MAIN] 4. EKSEKUSI PROFIL DAN DND DIJALANKAN!");
+                // Cek kill() untuk memastikan proses tidak terbunuh saat kita tidur, 
+                // lalu pastikan OOM-nya Foreground (0).
+                if (kill(game_pid, 0) == 0 && IsPidTrulyForeground(game_pid)) {
+                    LOGI("[TRACE-MAIN] PID {} Valid Foreground (Hidup)!", game_pid);
+                    
                     if (!last_game_package.empty()) {
-                        LOGI("Switching games! Resetting previous game: %s", last_game_package.c_str());
+                        LOGI("Switching games! Resetting previous game: {}", last_game_package);
                         ResolutionManager::GetInstance().ResetGameMode(last_game_package);
                     }
 
-                    LOGI("Enter Game: %s", active_package.c_str());
+                    LOGI("Enter Game: {}", active_package);
                     
                     auto active_game = game_registry.find_game(active_package); 
                     bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
@@ -261,7 +257,6 @@ void encore_main_daemon(void) {
                     }
                     
                     if (enable_dnd) {
-                        LOGI("[TRACE-MAIN] Memanggil set_do_not_disturb(true)");
                         set_do_not_disturb(true);
                         dnd_enabled_by_us = true;
                     }
@@ -269,16 +264,20 @@ void encore_main_daemon(void) {
                     cur_mode = PERFORMANCE_PROFILE;
                     apply_performance_profile(lite_mode, active_package, game_pid);
                     pid_tracker.set_pid(game_pid);
-                    LOGI("Profile: Performance (PID: %d)", game_pid);
+                    LOGI("Profile: Performance (PID: {})", game_pid);
 
                     last_game_package = active_package;
                 } else {
-                    LOGW("[TRACE-MAIN] 4. EKSEKUSI DIBATALKAN (Fake Resume): %s", active_package.c_str());
+                    // Berhasil menggagalkan jebakan Fake Resume OS!
+                    LOGW("[TRACE-MAIN] Fake resume diabaikan (Proses mati / OOM>0): {}", active_package);
                     active_package.clear();
                     in_game_session = false;
                 }
+            } else {
+                LOGW("[TRACE-MAIN] Gagal mendapat PID: {}", active_package);
+                active_package.clear();
+                in_game_session = false;
             }
-            continue;
         }
 
         // ===========================
