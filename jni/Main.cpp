@@ -210,63 +210,50 @@ void encore_main_daemon(void) {
         if (in_game_session && !active_package.empty() && active_package != last_game_package) {
             
             LOGI("[TRACE-MAIN] Logcat terpicu untuk: {}", active_package);
-            
             std::this_thread::sleep_for(std::chrono::milliseconds(1500));
             std::string real_focused_app = GetFocusedPackage();
-            LOGI("[TRACE-MAIN] Dumpsys melapor (mCurrentFocus): {}", real_focused_app.empty() ? "UNKNOWN" : real_focused_app);
+            LOGI("[TRACE-MAIN] Dumpsys melapor fokus pada: {}", real_focused_app.empty() ? "UNKNOWN" : real_focused_app);
 
             if (real_focused_app != active_package) {
-                LOGW("[TRACE-MAIN] Fake resume ketahuan! Membatalkan eksekusi DND & Profil.");
-                
-                char drain_buf[1024];
-                while (fgets(drain_buf, sizeof(drain_buf), log_pipe) != nullptr) {}
-                clearerr(log_pipe);
+                LOGW("[TRACE-MAIN] Validasi gagal. Fokus asli: {}. Resetting state...", real_focused_app);
                 active_package.clear();
                 in_game_session = false;
-                continue; 
-            }
-
-            pid_t game_pid = GetAppPID_Fast(active_package);
-            int retries = 0;
-            while (game_pid <= 0 && retries < 5) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                game_pid = GetAppPID_Fast(active_package);
-                retries++;
-            }
-
-            if (game_pid > 0) {
-                LOGI("[TRACE-MAIN] PID {} Valid! Eksekusi Game Mode.", game_pid);
-                
-                if (!last_game_package.empty()) {
-                    LOGI("Switching games! Resetting previous: {}", last_game_package);
-                    ResolutionManager::GetInstance().ResetGameMode(last_game_package);
-                    set_do_not_disturb(false);
-                }
-
-                LOGI("Enter Game: {}", active_package);
-                
-                auto active_game = game_registry.find_game(active_package); 
-                bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
-                bool enable_dnd = (active_game && active_game->enable_dnd);
-
-                ResolutionManager::GetInstance().ApplyGameMode(active_package);
-                BypassManager::GetInstance().SetBypass(!lite_mode);
-                
-                if (enable_dnd) {
-                    set_do_not_disturb(true);
-                } else {
-                    set_do_not_disturb(false);
-                }
-
-                cur_mode = PERFORMANCE_PROFILE;
-                apply_performance_profile(lite_mode, active_package, game_pid);
-                pid_tracker.set_pid(game_pid);
-                
-                last_game_package = active_package;
             } else {
-                LOGW("[TRACE-MAIN] Gagal dapat PID untuk: {}", active_package);
-                active_package.clear();
-                in_game_session = false;
+                pid_t game_pid = GetAppPID_Fast(active_package);
+                
+                for (int i = 0; i < 5 && game_pid <= 0; i++) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    game_pid = GetAppPID_Fast(active_package);
+                }
+
+                if (game_pid > 0) {
+                    LOGI("[TRACE-MAIN] PID {} Valid. Menerapkan Profil & DND.", game_pid);
+                    
+                    if (!last_game_package.empty()) {
+                        ResolutionManager::GetInstance().ResetGameMode(last_game_package);
+                        set_do_not_disturb(false);
+                    }
+
+                    auto active_game = game_registry.find_game(active_package); 
+                    bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
+                    bool enable_dnd = (active_game && active_game->enable_dnd);
+
+                    ResolutionManager::GetInstance().ApplyGameMode(active_package);
+                    BypassManager::GetInstance().SetBypass(!lite_mode);
+                    
+                    if (enable_dnd) {
+                        set_do_not_disturb(true);
+                    }
+
+                    cur_mode = PERFORMANCE_PROFILE;
+                    apply_performance_profile(lite_mode, active_package, game_pid);
+                    pid_tracker.set_pid(game_pid);
+                    last_game_package = active_package;
+                } else {
+                    LOGW("[TRACE-MAIN] PID tidak ditemukan untuk {}, membatalkan session.", active_package);
+                    active_package.clear();
+                    in_game_session = false;
+                }
             }
         }
 
