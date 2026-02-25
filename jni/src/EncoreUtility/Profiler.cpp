@@ -68,7 +68,7 @@ void run_perfcommon(void) {
     }
 }
 
-void apply_performance_profile(bool lite_mode, std::string game_pkg, pid_t game_pid) {
+void apply_performance_profile(bool lite_mode, const std::string& active_package, pid_t pid) {
     is_kanged();
     set_profiler_env_vars();
 

@@ -130,29 +130,29 @@ void encore_main_daemon(void) {
                 }
 
                 do {
-                std::string line(log_buf);
-                size_t start = line.find(',');
-                size_t end = line.find('/');
-                
-                if (start != std::string::npos && end != std::string::npos && end > start) {
-                    std::string_view pkg_view(line.c_str() + start + 1, end - start - 1);
+                    std::string_view line(log_buf); 
+                    size_t start = line.find(',');
+                    size_t end = line.find('/');
                     
-                    size_t first = pkg_view.find_first_not_of(" \t\r\n[");
-                    if (first != std::string_view::npos) {
-                        pkg_view.remove_prefix(first);
+                    if (start != std::string_view::npos && end != std::string_view::npos && end > start) {
+                        std::string_view pkg_view = line.substr(start + 1, end - start - 1);
                         
-                        size_t last = pkg_view.find_last_not_of(" \t\r\n]");
-                        if (last != std::string_view::npos) {
-                            pkg_view.remove_suffix(pkg_view.length() - last - 1);
-                        }
-                        
-                        if (!pkg_view.empty()) {
-                            new_fg_app = std::string(pkg_view);
-                            app_changed = true;
+                        size_t first = pkg_view.find_first_not_of(" \t\r\n[");
+                        if (first != std::string_view::npos) {
+                            pkg_view.remove_prefix(first);
+                            
+                            size_t last = pkg_view.find_last_not_of(" \t\r\n]");
+                            if (last != std::string_view::npos) {
+                                pkg_view.remove_suffix(pkg_view.length() - last - 1);
+                            }
+                            
+                            if (!pkg_view.empty()) {
+                                new_fg_app = std::string(pkg_view);
+                                app_changed = true;
+                            }
                         }
                     }
-                }
-            } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
+                } while (fgets(log_buf, sizeof(log_buf), log_pipe) != nullptr);
 
                 clearerr(log_pipe);
             }

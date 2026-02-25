@@ -79,11 +79,9 @@ std::string GetFocusedPackage() {
             if (space_pos != std::string::npos) {
                 pkg = line.substr(space_pos + 1, slash_pos - space_pos - 1);
                 
-                std::string clean_pkg = "";
-                for (char c : pkg) {
-                    if (isalnum(c) || c == '.' || c == '_') clean_pkg += c;
-                }
-                pkg = clean_pkg;
+                pkg.erase(std::remove_if(pkg.begin(), pkg.end(), [](unsigned char c) {
+                    return !(std::isalnum(c) || c == '.' || c == '_');
+                }), pkg.end());
             }
         }
     }
