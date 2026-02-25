@@ -223,20 +223,19 @@ void encore_main_daemon(void) {
 
                 bool is_truly_foreground = false;
                 if (game_pid > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
                     int oom_retries = 0;
-                    while (oom_retries < 6) {
-                        LOGI("[TRACE-MAIN] Mengecek OOM percobaan ke-%d...", oom_retries);
+                    while (oom_retries < 10) {
                         if (IsPidTrulyForeground(game_pid)) {
-                            is_truly_foreground = true;
-                            LOGI("[TRACE-MAIN] 3. HASIL: PID %d Valid Foreground (0)!", game_pid);
-                            break;
+                            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                            if (IsPidTrulyForeground(game_pid)) {
+                                is_truly_foreground = true;
+                                break;
+                            }
                         }
                         std::this_thread::sleep_for(std::chrono::milliseconds(50));
                         oom_retries++;
-                    }
-                    
-                    if (!is_truly_foreground) {
-                        LOGW("[TRACE-MAIN] 3. HASIL: PID %d DITOLAK! Skor OOM bukan 0.", game_pid);
                     }
                 }
 
