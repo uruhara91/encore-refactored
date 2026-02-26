@@ -187,7 +187,6 @@ unzip -o "$ZIPFILE" "webroot/*" -d "$MODPATH" -x "*.sha256" >&2
 ui_print "- Encore Tweaks configuration setup"
 make_dir "$MODULE_CONFIG"
 extract "$ZIPFILE" 'device_mitigation.json' "$MODULE_CONFIG"
-extract "$ZIPFILE" 'games.txt' "$MODULE_CONFIG"
 [ ! -f "$MODULE_CONFIG/ppm_policies_mediatek" ] && echo 'PWR_THRO|THERMAL' >"$MODULE_CONFIG/ppm_policies_mediatek"
 
 # Permission settings
