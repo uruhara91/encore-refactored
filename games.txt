@@ -1,3 +1,0 @@
-com.mobile.legends:0.7
-com.garena.game.df:0.7
-com.supercell.clashroyale:0.7

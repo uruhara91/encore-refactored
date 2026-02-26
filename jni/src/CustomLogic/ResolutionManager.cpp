@@ -1,6 +1,5 @@
 #include "ResolutionManager.hpp"
 #include "EncoreLog.hpp"
-#include <GameRegistry.hpp>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
