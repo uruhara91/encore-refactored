@@ -1,6 +1,6 @@
 #!/system/bin/sh
 #
-# Copyright (C) 2024-2025 Rem01Gaming
+# Copyright (C) 2024-2026 Rem01Gaming
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,9 +21,10 @@
 MODULE_CONFIG="/data/adb/.config/encore"
 
 change_cpu_gov() {
-	chmod 644 /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-	echo "$1" | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-	chmod 444 /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+	chown 0:0 /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+	chown 0:0 /sys/devices/system/cpu/cpufreq/policy*/scaling_governor
+	echo "$1" | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null
+	echo "$1" | tee /sys/devices/system/cpu/cpufreq/policy*/scaling_governor >/dev/null
 }
 
 save_logs() {

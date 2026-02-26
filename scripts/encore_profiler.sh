@@ -1,6 +1,6 @@
 #!/system/bin/sh
 #
-# Copyright (C) 2024-2025 Rem01Gaming
+# Copyright (C) 2024-2026 Rem01Gaming
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ DEFAULT_CPU_GOV="$ENCORE_BALANCED_CPUGOV"
 # Just a note that lite mode is now controlled by script arg, check case
 # statement on the EOF and performance_profile() function.
 
-# Certain ENCORE_* variables is set by daemon, see 'jni/src/EncoreUtility/Profiler.cpp'.
+# ENCORE_* variables is set by daemon, see 'jni/src/EncoreUtility/Profiler.cpp'.
 
 ###################################
 # Common Function
@@ -44,22 +44,22 @@ DEFAULT_CPU_GOV="$ENCORE_BALANCED_CPUGOV"
 
 apply() {
 	[ ! -f "$2" ] && return 1
-	chmod 644 "$2" >/dev/null 2>&1
+	chmod 640 "$2" >/dev/null 2>&1
 	echo "$1" >"$2" 2>/dev/null
-	chmod 444 "$2" >/dev/null 2>&1
+	chmod 440 "$2" >/dev/null 2>&1
 }
 
 write() {
 	[ ! -f "$2" ] && return 1
-	chmod 644 "$2" >/dev/null 2>&1
+	chmod 640 "$2" >/dev/null 2>&1
 	echo "$1" >"$2" 2>/dev/null
 }
 
 change_cpu_gov() {
-	chmod 644 /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+	chown 0:0 /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+	chown 0:0 /sys/devices/system/cpu/cpufreq/policy*/scaling_governor
 	echo "$1" | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null
-	chmod 444 /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-	chmod 444 /sys/devices/system/cpu/cpufreq/policy*/scaling_governor
+	echo "$1" | tee /sys/devices/system/cpu/cpufreq/policy*/scaling_governor >/dev/null
 }
 
 ###################################
@@ -102,15 +102,15 @@ cpufreq_ppm_max_perf() {
 	for path in /sys/devices/system/cpu/cpufreq/policy*; do
 		((cluster++))
 		cpu_maxfreq=$(<"$path/cpuinfo_max_freq")
-		apply "$cluster $cpu_maxfreq" /proc/ppm/policy/hard_userlimit_max_cpu_freq
+		write "$cluster $cpu_maxfreq" /proc/ppm/policy/hard_userlimit_max_cpu_freq
 
 		[ $LITE_MODE -eq 1 ] && {
 			cpu_midfreq=$(which_midfreq "$path/scaling_available_frequencies")
-			apply "$cluster $cpu_midfreq" /proc/ppm/policy/hard_userlimit_min_cpu_freq
+			write "$cluster $cpu_midfreq" /proc/ppm/policy/hard_userlimit_min_cpu_freq
 			continue
 		}
 
-		apply "$cluster $cpu_maxfreq" /proc/ppm/policy/hard_userlimit_min_cpu_freq
+		write "$cluster $cpu_maxfreq" /proc/ppm/policy/hard_userlimit_min_cpu_freq
 	done
 }
 
@@ -127,7 +127,7 @@ cpufreq_max_perf() {
 
 		apply "$cpu_maxfreq" "$path/scaling_min_freq"
 	done
-	chmod -f 444 /sys/devices/system/cpu/cpufreq/policy*/scaling_*_freq
+	chmod -f 440 /sys/devices/system/cpu/cpufreq/policy*/scaling_*_freq
 }
 
 cpufreq_ppm_unlock() {
@@ -148,7 +148,7 @@ cpufreq_unlock() {
 		write "$cpu_maxfreq" "$path/scaling_max_freq"
 		write "$cpu_minfreq" "$path/scaling_min_freq"
 	done
-	chmod -f 644 /sys/devices/system/cpu/cpufreq/policy*/scaling_*_freq
+	chmod -f 640 /sys/devices/system/cpu/cpufreq/policy*/scaling_*_freq
 }
 
 devfreq_max_perf() {
@@ -240,17 +240,10 @@ mediatek_performance() {
 	apply 0 /sys/module/sspm_v3/holders/ged/parameters/is_GED_KPI_enabled
 
 	# GPU Frequency
-	if [ $LITE_MODE -eq 0 ]; then
-		if [ -d /proc/gpufreqv2 ]; then
-			apply 0 /proc/gpufreqv2/fix_target_opp_index
-		else
-			gpu_freq=$(sed -n 's/.*freq = \([0-9]\{1,\}\).*/\1/p' /proc/gpufreq/gpufreq_opp_dump | head -n 1)
-			apply "$gpu_freq" /proc/gpufreq/gpufreq_opp_freq
-		fi
-	else
-		apply 0 /proc/gpufreq/gpufreq_opp_freq
-		apply -1 /proc/gpufreqv2/fix_target_opp_index
+	apply 0 /proc/gpufreq/gpufreq_opp_freq
+	apply -1 /proc/gpufreqv2/fix_target_opp_index
 
+	if [ $LITE_MODE -eq 0 ]; then
 		# Set min freq via GED
 		if [ -d /proc/gpufreqv2 ]; then
 			mid_oppfreq=$(mtk_gpufreq_midfreq_index /proc/gpufreqv2/gpu_working_opp_table)
@@ -258,7 +251,7 @@ mediatek_performance() {
 			mid_oppfreq=$(mtk_gpufreq_midfreq_index /proc/gpufreq/gpufreq_opp_dump)
 		fi
 
-		apply $mid_oppfreq /sys/kernel/ged/hal/custom_boost_gpu_freq
+		apply "$mid_oppfreq" /sys/kernel/ged/hal/custom_boost_gpu_freq
 	fi
 
 	# Disable GPU Power limiter
@@ -288,7 +281,7 @@ mediatek_performance() {
 
 snapdragon_performance() {
 	# Qualcomm CPU Bus and DRAM frequencies
-	[ -z $ENCORE_DISABLE_DDR_TWEAK ] && {
+	[ -z "$ENCORE_DISABLE_DDR_TWEAK" ] && {
 		for path in /sys/class/devfreq/*cpu*-lat \
 			/sys/class/devfreq/*cpu*-bw \
 			/sys/class/devfreq/*llccbw* \
@@ -298,19 +291,19 @@ snapdragon_performance() {
 			/sys/class/devfreq/*cpubw* \
 			/sys/class/devfreq/*kgsl-ddr-qos*; do
 
-			if [ $LITE_MODE -eq 1 ]; then
-				devfreq_mid_perf "$path"
-			else
+			if [ $LITE_MODE -eq 0 ]; then
 				devfreq_max_perf "$path"
+			else
+				devfreq_mid_perf "$path"
 			fi
 		done &
 
 		for component in DDR LLCC L3; do
 			path="/sys/devices/system/cpu/bus_dcvs/$component"
-			if [ "$LITE_MODE" -eq 1 ]; then
-				qcom_cpudcvs_mid_perf "$path"
-			else
+			if [ "$LITE_MODE" -eq 0 ]; then
 				qcom_cpudcvs_max_perf "$path"
+			else
+				qcom_cpudcvs_mid_perf "$path"
 			fi
 		done &
 	}
@@ -318,9 +311,9 @@ snapdragon_performance() {
 	# GPU tweak
 	gpu_path="/sys/class/kgsl/kgsl-3d0/devfreq"
 	if [ "$LITE_MODE" -eq 0 ]; then
-		devfreq_max_perf "$gpu_path"
-	else
 		devfreq_mid_perf "$gpu_path"
+	else
+		devfreq_unlock "$gpu_path"
 	fi
 
 	# Disable GPU Bus split
@@ -336,11 +329,12 @@ tegra_performance() {
 		max_freq=$(which_maxfreq "$gpu_path/available_frequencies")
 		apply "$max_freq" "$gpu_path/gpu_cap_rate"
 
-		if [ $LITE_MODE -eq 1 ]; then
+		if [ $LITE_MODE -eq 0 ]; then
 			mid_freq=$(which_midfreq "$gpu_path/available_frequencies")
 			apply "$mid_freq" "$gpu_path/gpu_floor_rate"
 		else
-			apply "$max_freq" "$gpu_path/gpu_floor_rate"
+			min_freq=$(which_minfreq "$gpu_path/available_frequencies")
+			apply "$min_freq" "$gpu_path/gpu_floor_rate"
 		fi
 	fi
 }
@@ -352,11 +346,12 @@ exynos_performance() {
 		max_freq=$(which_maxfreq "$gpu_path/gpu_available_frequencies")
 		apply "$max_freq" "$gpu_path/gpu_max_clock"
 
-		if [ $LITE_MODE -eq 1 ]; then
+		if [ $LITE_MODE -eq 0 ]; then
 			mid_freq=$(which_midfreq "$gpu_path/gpu_available_frequencies")
 			apply "$mid_freq" "$gpu_path/gpu_min_clock"
 		else
-			apply "$max_freq" "$gpu_path/gpu_min_clock"
+			min_freq=$(which_minfreq "$gpu_path/gpu_available_frequencies")
+			apply "$min_freq" "$gpu_path/gpu_min_clock"
 		fi
 	}
 
@@ -364,7 +359,7 @@ exynos_performance() {
 	apply always_on "$mali_sysfs/power_policy"
 
 	# DRAM and Buses Frequency
-	[ -z $ENCORE_DISABLE_DDR_TWEAK ] && {
+	[ -z "$ENCORE_DISABLE_DDR_TWEAK" ] && {
 		for path in /sys/class/devfreq/*devfreq_mif*; do
 			if [ $LITE_MODE -eq 1 ]; then
 				devfreq_mid_perf "$path"
@@ -380,9 +375,9 @@ unisoc_performance() {
 	gpu_path=$(find /sys/class/devfreq/ -type d -iname "*.gpu" -print -quit 2>/dev/null)
 	[ -n "$gpu_path" ] && {
 		if [ $LITE_MODE -eq 0 ]; then
-			devfreq_max_perf "$gpu_path"
-		else
 			devfreq_mid_perf "$gpu_path"
+		else
+			devfreq_unlock "$gpu_path"
 		fi
 	}
 }
@@ -392,18 +387,19 @@ tensor_performance() {
 	gpu_path=$(find /sys/devices/platform/ -type d -iname "*.mali" -print -quit 2>/dev/null)
 	[ -n "$gpu_path" ] && {
 		max_freq=$(which_maxfreq "$gpu_path/available_frequencies")
-		apply "$max_freq" "$gpu_path/scaling_max_freq"
+		apply "max_freq" "$gpu_path/scaling_max_freq"
 
-		if [ $LITE_MODE -eq 1 ]; then
+		if [ $LITE_MODE -eq 0 ]; then
 			mid_freq=$(which_midfreq "$gpu_path/available_frequencies")
 			apply "$mid_freq" "$gpu_path/scaling_min_freq"
 		else
-			apply "$max_freq" "$gpu_path/scaling_min_freq"
+			mid_freq=$(which_minfreq "$gpu_path/available_frequencies")
+			apply "$min_freq" "$gpu_path/scaling_min_freq"
 		fi
 	}
 
 	# DRAM frequency
-	[ -z $ENCORE_DISABLE_DDR_TWEAK ] && {
+	[ -z "$ENCORE_DISABLE_DDR_TWEAK" ] && {
 		for path in /sys/class/devfreq/*devfreq_mif*; do
 			if [ $LITE_MODE -eq 1 ]; then
 				devfreq_mid_perf "$path"
@@ -453,7 +449,7 @@ mediatek_normal() {
 		min_oppfreq=$(mtk_gpufreq_minfreq_index /proc/gpufreq/gpufreq_opp_dump)
 	fi
 
-	apply $min_oppfreq /sys/kernel/ged/hal/custom_boost_gpu_freq
+	apply "$min_oppfreq" /sys/kernel/ged/hal/custom_boost_gpu_freq
 
 	# GPU Power limiter
 	[ -f "/proc/gpufreq/gpufreq_power_limited" ] && {
@@ -476,7 +472,7 @@ mediatek_normal() {
 
 snapdragon_normal() {
 	# Qualcomm CPU Bus and DRAM frequencies
-	[ -z $ENCORE_DISABLE_DDR_TWEAK ] && {
+	[ -z "$ENCORE_DISABLE_DDR_TWEAK" ] && {
 		for path in /sys/class/devfreq/*cpu*-lat \
 			/sys/class/devfreq/*cpu*-bw \
 			/sys/class/devfreq/*llccbw* \
@@ -528,7 +524,7 @@ exynos_normal() {
 	apply coarse_demand "$mali_sysfs/power_policy"
 
 	# DRAM frequency
-	[ -z $ENCORE_DISABLE_DDR_TWEAK ] && {
+	[ -z "$ENCORE_DISABLE_DDR_TWEAK" ] && {
 		for path in /sys/class/devfreq/*devfreq_mif*; do
 			devfreq_unlock "$path"
 		done &
@@ -552,7 +548,7 @@ tensor_normal() {
 	}
 
 	# DRAM frequency
-	[ -z $ENCORE_DISABLE_DDR_TWEAK ] && {
+	[ -z "$ENCORE_DISABLE_DDR_TWEAK" ] && {
 		for path in /sys/class/devfreq/*devfreq_mif*; do
 			devfreq_unlock "$path"
 		done &
@@ -580,8 +576,7 @@ mediatek_powersave() {
 snapdragon_powersave() {
 	# GPU Frequency
 	# There's some report that this causes no video issue after the phone went sleep and awaken
-	# However there's no informations about which affected device models that've been disclosed by the users
-	if [ -z $ENCORE_QCOM_NO_GPU_POWERSAVE ]; then
+	if [ -z "$ENCORE_QCOM_NO_GPU_POWERSAVE" ]; then
 		devfreq_min_perf /sys/class/kgsl/kgsl-3d0/devfreq
 	fi
 }
@@ -715,8 +710,8 @@ perfcommon() {
 }
 
 performance_profile() {
-  LITE_MODE=0
-  [ "$1" = "lite" ] && LITE_MODE=1
+	LITE_MODE=0
+	[ "$1" = "lite" ] && LITE_MODE=1
 
 	# Enable Do not Disturb
 	[ "$(<$MODULE_CONFIG/dnd_gameplay)" -eq 1 ] && set_dnd 1
@@ -777,7 +772,7 @@ performance_profile() {
 	# If lite mode enabled, use the default governor instead.
 	# device mitigation also will prevent performance gov to be
 	# applied (some device hates performance governor).
-	if [ $LITE_MODE -eq 0 ] && [ -z $ENCORE_NO_PERFORMANCE_CPUGOV ]; then
+	if [ $LITE_MODE -eq 0 ] && [ -z "$ENCORE_NO_PERFORMANCE_CPUGOV" ]; then
 		change_cpu_gov performance
 	else
 		change_cpu_gov "$DEFAULT_CPU_GOV"
@@ -785,9 +780,9 @@ performance_profile() {
 
 	# Force CPU to highest possible frequency.
 	if [ -d /proc/ppm ]; then
-	  cpufreq_ppm_max_perf
+		cpufreq_ppm_max_perf
 	else
-	  cpufreq_max_perf
+		cpufreq_max_perf
 	fi
 
 	# I/O Tweaks
@@ -863,9 +858,9 @@ balance_profile() {
 	change_cpu_gov "$DEFAULT_CPU_GOV"
 
 	if [ -d /proc/ppm ]; then
-	  cpufreq_ppm_unlock
+		cpufreq_ppm_unlock
 	else
-	  cpufreq_unlock
+		cpufreq_unlock
 	fi
 
 	# I/O Tweaks
