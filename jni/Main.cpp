@@ -345,7 +345,6 @@ int run_daemon() {
 
     LOGI("Initializing Custom Logic Managers...");
     BypassManager::GetInstance().Init();
-    ResolutionManager::GetInstance().LoadGameMap("/data/adb/.config/encore/games.txt");
 
     LOGI("Encore Tweaks daemon started");
     SetModule_DescriptionStatus("\xF0\x9F\x98\x8B Tweaks applied successfully");

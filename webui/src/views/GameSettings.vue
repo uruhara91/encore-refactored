@@ -118,6 +118,35 @@
                 <ToggleSwitch class="opacity-100!" :model-value="appSettings.enable_dnd"
                   :disabled="!appSettings.isEnabled" @update:model-value="toggleDndMode" />
               </div>
+
+              <!-- Resolution Downscale -->
+              <div class="space-y-3" :class="{ 'opacity-50': !appSettings.isEnabled }">
+                <div class="flex items-center gap-1.5">
+                  <div class="pl-3 pr-4">
+                    <h3 class="text-base font-medium text-on-surface">
+                      Resolution Downscale
+                    </h3>
+                    <p class="text-sm text-on-surface-variant mt-1">
+                      Lower ratio increases FPS (e.g. 0.7 or 0.5). Use 1.0 for Native.
+                    </p>
+                  </div>
+                </div>
+                
+                <div class="pl-3 pr-4">
+                  <select 
+                    v-model="appSettings.downscale_ratio"
+                    :disabled="!appSettings.isEnabled"
+                    class="w-full bg-surface-variant text-on-surface p-3 rounded-xl border-none outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
+                  >
+                    <option value="1.0">1.0 (Native)</option>
+                    <option value="0.9">0.9</option>
+                    <option value="0.8">0.8</option>
+                    <option value="0.7">0.7</option>
+                    <option value="0.6">0.6</option>
+                    <option value="0.5">0.5</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -254,6 +283,7 @@ function loadAppSettings() {
     isEnabled: currentApp.value.packageName in gamesStore.gamelistConfig,
     lite_mode: !!cfg.lite_mode,
     enable_dnd: !!cfg.enable_dnd,
+    downscale_ratio: cfg.downscale_ratio || "1.0"
   }
 }
 
@@ -313,6 +343,7 @@ async function saveSettings() {
       await gamesStore.updateAppConfig(pkg, {
         lite_mode: appSettings.value.lite_mode,
         enable_dnd: appSettings.value.enable_dnd,
+        downscale_ratio: appSettings.value.downscale_ratio
       })
     } else {
       await gamesStore.updateAppConfig(pkg, null)

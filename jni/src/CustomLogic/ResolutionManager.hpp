@@ -11,17 +11,11 @@ public:
         return instance;
     }
 
-    void LoadGameMap(const std::string& configPath);
     void ApplyGameMode(const std::string& packageName);
     void ResetGameMode(const std::string& packageName);
 
 private:
     ResolutionManager() = default;
-    
-    std::vector<std::pair<std::string, std::string>> gameRatios;
-    
     std::unordered_map<std::string, std::string> appliedCache; 
-
-    std::string GetRatio(const std::string& pkg);
     void ExecuteCmdDirect(const std::vector<const char*>& args);
 };

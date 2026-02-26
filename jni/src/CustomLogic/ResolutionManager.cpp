@@ -1,5 +1,6 @@
 #include "ResolutionManager.hpp"
 #include "EncoreLog.hpp"
+#include <GameRegistry.hpp>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -9,63 +10,13 @@
 #include <vector>
 #include <string>
 
-void ResolutionManager::LoadGameMap(const std::string& configPath) {
-    gameRatios.clear();
-    
-    int fd = open(configPath.c_str(), O_RDONLY | O_CLOEXEC);
-    if (fd == -1) {
-        LOGE("ResolutionManager: Failed to open config at %s", configPath.c_str());
+void ResolutionManager::ApplyGameMode(const std::string& packageName) {
+    auto game = game_registry.find_game(packageName);
+    if (!game || game->downscale_ratio == "1.0" || game->downscale_ratio.empty()) {
         return;
     }
 
-    struct stat sb;
-    if (fstat(fd, &sb) == -1) { close(fd); return; }
-    
-    std::string content(sb.st_size, '\0');
-    read(fd, &content[0], sb.st_size);
-    close(fd);
-
-    const char* ptr = content.c_str();
-    const char* end = ptr + content.length();
-
-    while (ptr < end) {
-        while (ptr < end && (*ptr == ' ' || *ptr == '\t' || *ptr == '\r' || *ptr == '\n')) ptr++;
-        if (ptr >= end) break;
-        if (*ptr == '#') { 
-             while (ptr < end && *ptr != '\n') ptr++;
-             continue;
-        }
-
-        const char* lineStart = ptr;
-        while (ptr < end && *ptr != '\n') ptr++;
-        std::string line(lineStart, ptr - lineStart);
-
-        size_t delPos = line.find(':');
-        if (delPos != std::string::npos) {
-            std::string pkg = line.substr(0, delPos);
-            std::string ratio = line.substr(delPos + 1);
-            
-            pkg.erase(pkg.find_last_not_of(" \t\r\n") + 1);
-            ratio.erase(ratio.find_last_not_of(" \t\r\n") + 1);
-            pkg.erase(0, pkg.find_first_not_of(" \t\r\n"));
-            ratio.erase(0, ratio.find_first_not_of(" \t\r\n"));
-
-            gameRatios.push_back({pkg, ratio});
-        }
-    }
-    LOGI("ResolutionManager: Loaded %zu configs", gameRatios.size());
-}
-
-std::string ResolutionManager::GetRatio(const std::string& pkg) {
-    for (const auto& item : gameRatios) {
-        if (item.first == pkg) return item.second;
-    }
-    return "";
-}
-
-void ResolutionManager::ApplyGameMode(const std::string& packageName) {
-    std::string ratio = GetRatio(packageName);
-    if (ratio.empty()) return;
+    std::string ratio = game->downscale_ratio;
 
     if (appliedCache.contains(packageName) && appliedCache[packageName] == ratio) return;
 

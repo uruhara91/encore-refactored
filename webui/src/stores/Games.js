@@ -75,6 +75,7 @@ export const useGamesStore = defineStore('games', () => {
       currentConfig[packageName] = {
         lite_mode: !!config.lite_mode,
         enable_dnd: !!config.enable_dnd,
+        downscale_ratio: config.downscale_ratio || "1.0"
       }
     } else {
       delete currentConfig[packageName]
@@ -99,6 +100,7 @@ export const useGamesStore = defineStore('games', () => {
       return await updateAppConfig(packageName, {
         lite_mode: currentConfig.lite_mode || false,
         enable_dnd: currentConfig.enable_dnd || false,
+        downscale_ratio: currentConfig.downscale_ratio || "1.0"
       })
     } else {
       return await updateAppConfig(packageName, null)

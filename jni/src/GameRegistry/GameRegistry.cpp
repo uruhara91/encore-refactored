@@ -100,6 +100,13 @@ bool GameRegistry::load_from_json(const std::string &filename) {
             game.enable_dnd = false;
         }
 
+        // Parse downscale_ratio
+        if (game_obj.HasMember("downscale_ratio") && game_obj["downscale_ratio"].IsString()) {
+            game.downscale_ratio = game_obj["downscale_ratio"].GetString();
+        } else {
+            game.downscale_ratio = "1.0";
+        }
+
         new_list.push_back(game);
     }
 
