@@ -10,13 +10,10 @@
 #include <vector>
 #include <string>
 
-void ResolutionManager::ApplyGameMode(const std::string& packageName) {
-    auto game = game_registry.find_game(packageName);
-    if (!game || game->downscale_ratio == "1.0" || game->downscale_ratio.empty()) {
-        return;
+void ResolutionManager::ApplyGameMode(const std::string& packageName, const std::string& ratio) {
+    if (ratio == "1.0" || ratio.empty()) {
+        return; 
     }
-
-    std::string ratio = game->downscale_ratio;
 
     if (appliedCache.contains(packageName) && appliedCache[packageName] == ratio) return;
 

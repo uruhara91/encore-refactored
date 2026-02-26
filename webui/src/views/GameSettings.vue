@@ -293,7 +293,7 @@ function toggleAppEnabled() {
     isEnabled: newValue,
     lite_mode: newValue ? appSettings.value.lite_mode : false,
     enable_dnd: newValue ? appSettings.value.enable_dnd : false,
-    downscale_ratio: newValue ? (appSettings.value.downscale_ratio || "1.0") : "1.0",
+    downscale_ratio: appSettings.value.downscale_ratio || "1.0",
   }
 }
 

@@ -11,7 +11,7 @@ public:
         return instance;
     }
 
-    void ApplyGameMode(const std::string& packageName);
+    void ApplyGameMode(const std::string& packageName, const std::string& ratio);
     void ResetGameMode(const std::string& packageName);
 
 private:
