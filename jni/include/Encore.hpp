@@ -42,5 +42,6 @@ struct EncoreGameList {
     std::string package_name;
     bool lite_mode;
     bool enable_dnd;
+    bool enable_bypass = false;
     std::string downscale_ratio = "1.0";
 };

@@ -75,6 +75,7 @@ export const useGamesStore = defineStore('games', () => {
       currentConfig[packageName] = {
         lite_mode: !!config.lite_mode,
         enable_dnd: !!config.enable_dnd,
+        enable_bypass: !!config.enable_bypass,
         downscale_ratio: config.downscale_ratio || "1.0"
       }
     } else {
@@ -100,6 +101,7 @@ export const useGamesStore = defineStore('games', () => {
       return await updateAppConfig(packageName, {
         lite_mode: currentConfig.lite_mode || false,
         enable_dnd: currentConfig.enable_dnd || false,
+        enable_bypass: currentConfig.enable_bypass || false,
         downscale_ratio: currentConfig.downscale_ratio || "1.0"
       })
     } else {

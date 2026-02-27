@@ -119,6 +119,23 @@
                   :disabled="!appSettings.isEnabled" @update:model-value="toggleDndMode" />
               </div>
 
+              <!-- Bypass Charge-->
+              <div class="flex items-center justify-between" :class="{ 'opacity-50': !appSettings.isEnabled }">
+                <div class="flex items-center gap-1.5">
+                  <Chipset class="text-primary shrink-0" />
+                  <div class="pl-3 pr-4">
+                    <h3 class="text-base font-medium text-on-surface">
+                      Performance Bypass
+                    </h3>
+                    <p class="text-sm text-on-surface-variant mt-1">
+                      Bypass system thermal and power limits.
+                    </p>
+                  </div>
+                </div>
+                <ToggleSwitch class="opacity-100!" :model-value="appSettings.enable_bypass"
+                  :disabled="!appSettings.isEnabled" @update:model-value="toggleBypassMode" />
+              </div>
+
               <!-- Resolution Downscale -->
               <div class="space-y-3" :class="{ 'opacity-50': !appSettings.isEnabled }">
                 <div class="flex items-center gap-1.5">
@@ -179,7 +196,7 @@ const router = useRouter()
 const gamesStore = useGamesStore()
 const encoreConfigStore = useEncoreConfigStore()
 
-const appSettings = shallowRef({ isEnabled: false, lite_mode: false, enable_dnd: false, downscale_ratio: "1.0" })
+const appSettings = shallowRef({ isEnabled: false, lite_mode: false, enable_dnd: false, enable_bypass: false, downscale_ratio: "1.0" })
 
 const currentApp = ref({})
 const originalSettings = ref({})
@@ -239,7 +256,7 @@ async function loadAppData(packageName = null) {
   if (!targetPackageName) return router.push('/games')
 
   currentApp.value = {}
-  appSettings.value = { isEnabled: false, lite_mode: false, enable_dnd: false, downscale_ratio: "1.0" }
+  appSettings.value = { isEnabled: false, lite_mode: false, enable_dnd: false, enable_bypass: false, downscale_ratio: "1.0" }
 
   // First try to get from store
   const fromStore = gamesStore.userApps.find((a) => a.packageName === targetPackageName)
@@ -283,6 +300,7 @@ function loadAppSettings() {
     isEnabled: currentApp.value.packageName in gamesStore.gamelistConfig,
     lite_mode: !!cfg.lite_mode,
     enable_dnd: !!cfg.enable_dnd,
+    enable_bypass: !!cfg.enable_bypass,
     downscale_ratio: cfg.downscale_ratio || "1.0"
   }
 }
@@ -293,6 +311,7 @@ function toggleAppEnabled() {
     isEnabled: newValue,
     lite_mode: newValue ? appSettings.value.lite_mode : false,
     enable_dnd: newValue ? appSettings.value.enable_dnd : false,
+    enable_bypass: newValue ? (appSettings.value.enable_bypass || false) : false,
     downscale_ratio: appSettings.value.downscale_ratio || "1.0",
   }
 }
@@ -315,6 +334,15 @@ function toggleDndMode() {
     appSettings.value = {
       ...appSettings.value,
       enable_dnd: !appSettings.value.enable_dnd,
+    }
+  }
+}
+
+function toggleBypassMode() {
+  if (appSettings.value.isEnabled) {
+    appSettings.value = {
+      ...appSettings.value,
+      enable_bypass: !appSettings.value.enable_bypass,
     }
   }
 }

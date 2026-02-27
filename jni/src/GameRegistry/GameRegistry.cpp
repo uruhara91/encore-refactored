@@ -100,6 +100,13 @@ bool GameRegistry::load_from_json(const std::string &filename) {
             game.enable_dnd = false;
         }
 
+        // Parse enable_bypass with default to false
+        if (game_obj.HasMember("enable_bypass") && game_obj["enable_bypass"].IsBool()) {
+            game.enable_bypass = game_obj["enable_bypass"].GetBool();
+        } else {
+            game.enable_bypass = false;
+        }
+
         // Parse downscale_ratio
         if (game_obj.HasMember("downscale_ratio") && game_obj["downscale_ratio"].IsString()) {
             game.downscale_ratio = game_obj["downscale_ratio"].GetString();
@@ -138,6 +145,7 @@ bool GameRegistry::populate_from_base(const std::string &gamelist, const std::st
             game.package_name = package_name;
             game.lite_mode = false;
             game.enable_dnd = false;
+            game.enable_bypass = false;
             game_list.push_back(game);
         }
     }
@@ -152,6 +160,7 @@ bool GameRegistry::populate_from_base(const std::string &gamelist, const std::st
         rapidjson::Value game_obj(rapidjson::kObjectType);
         game_obj.AddMember("lite_mode", game.lite_mode, allocator);
         game_obj.AddMember("enable_dnd", game.enable_dnd, allocator);
+        game_obj.AddMember("enable_bypass", game.enable_bypass, allocator);
 
         rapidjson::Value downscale_val;
         downscale_val.SetString(game.downscale_ratio.c_str(), allocator);
