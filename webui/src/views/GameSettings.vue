@@ -125,10 +125,10 @@
                   <Chipset class="text-primary shrink-0" />
                   <div class="pl-3 pr-4">
                     <h3 class="text-base font-medium text-on-surface">
-                      Performance Bypass
+                      Bypass Charge
                     </h3>
                     <p class="text-sm text-on-surface-variant mt-1">
-                      Bypass system thermal and power limits.
+                      Bypass system power supply.
                     </p>
                   </div>
                 </div>
@@ -187,6 +187,7 @@ import ArrowLeftIcon from '@/components/icons/ArrowLeft.vue'
 import Candy from '@/components/icons/Candy.vue'
 import DotsVertical from '@/components/icons/DotsVertical.vue'
 import Feather from '@/components/icons/Feather.vue'
+import Chipset from '@/components/icons/Chipset.vue'
 import NoEntry from '@/components/icons/NoEntry.vue'
 import InformationOutline from '@/components/icons/InformationOutline.vue'
 import OpenInNew from '@/components/icons/OpenInNew.vue'
