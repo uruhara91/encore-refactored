@@ -139,6 +139,7 @@
               <!-- Resolution Downscale -->
               <div class="space-y-3" :class="{ 'opacity-50': !appSettings.isEnabled }">
                 <div class="flex items-center gap-1.5">
+                  <Star class="text-primary shrink-0" />
                   <div class="pl-3 pr-4">
                     <h3 class="text-base font-medium text-on-surface">
                       Resolution Downscale
@@ -155,7 +156,7 @@
                     :disabled="!appSettings.isEnabled"
                     class="w-full bg-surface-variant text-on-surface p-3 rounded-xl border-none outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
                   >
-                    <option value="1.0">1.0 (Native)</option>
+                    <option value="1.0">1.0</option>
                     <option value="0.9">0.9</option>
                     <option value="0.8">0.8</option>
                     <option value="0.7">0.7</option>
@@ -188,6 +189,7 @@ import Candy from '@/components/icons/Candy.vue'
 import DotsVertical from '@/components/icons/DotsVertical.vue'
 import Feather from '@/components/icons/Feather.vue'
 import Chipset from '@/components/icons/Chipset.vue'
+import Star from '@/components/icons/Star.vue'
 import NoEntry from '@/components/icons/NoEntry.vue'
 import InformationOutline from '@/components/icons/InformationOutline.vue'
 import OpenInNew from '@/components/icons/OpenInNew.vue'
