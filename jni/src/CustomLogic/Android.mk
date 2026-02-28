@@ -7,13 +7,12 @@ LOCAL_MODULE := EncoreCustomLogic
 LOCAL_SRC_FILES := BypassManager.cpp ResolutionManager.cpp
 LOCAL_C_INCLUDES := \
 	$(ROOT_PATH)/include \
-    $(ROOT_PATH)/external/spdlog/include
+    $(ROOT_PATH)/external/spdlog/include \
+	$(LOCAL_PATH)/../EncoreUtility
 
 LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)
 
 LOCAL_CPPFLAGS += -fexceptions -fvisibility=hidden -std=c++23 -Oz -flto
 LOCAL_CPPFLAGS += -Wpedantic -Wall -Wextra -Werror -Wformat -Wuninitialized
-
-LOCAL_LDFLAGS += -Oz -flto -Wl,--gc-sections -Wl,--icf=safe
 
 include $(BUILD_STATIC_LIBRARY)

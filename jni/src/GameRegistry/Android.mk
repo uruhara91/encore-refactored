@@ -16,6 +16,4 @@ LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)
 LOCAL_CPPFLAGS += -fexceptions -fvisibility=hidden -std=c++23 -Oz -flto
 LOCAL_CPPFLAGS += -Wpedantic -Wall -Wextra -Werror -Wformat -Wuninitialized
 
-LOCAL_LDFLAGS += -Oz -flto -Wl,--gc-sections -Wl,--icf=safe
-
 include $(BUILD_STATIC_LIBRARY)
