@@ -33,7 +33,13 @@ void on_json_modified(const struct inotify_event *event, const std::string &path
 
     auto OnGamelistModified = [&](const std::string &path) -> void {
         LOGD_TAG("InotifyHandler", "Callback OnGamelistModified reached");
-        game_registry.load_from_json(path);
+        if (game_registry.load_from_json(path)) {
+            std::vector<EncoreGameList> all_games;
+            for (const auto& pkg : game_registry.get_all_package_names()) {
+                if (auto game = game_registry.find_game(pkg)) all_games.push_back(*game);
+            }
+            ResolutionManager::GetInstance().SyncGameModes(all_games);
+        }
     };
 
     auto OnDeviceMitigationModified = [&](const std::string &path) -> void {

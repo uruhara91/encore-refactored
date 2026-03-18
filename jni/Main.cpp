@@ -58,6 +58,8 @@ void encore_main_daemon(void) {
 
     std::string active_package;
     std::string last_game_package = "";
+    std::string pending_package = "";
+    auto validation_time = std::chrono::steady_clock::time_point::max();
     
     bool in_game_session = false;
     bool battery_saver_state = CheckBatterySaver();
@@ -109,8 +111,16 @@ void encore_main_daemon(void) {
         }
 
         int timeout_ms = in_game_session ? INGAME_LOOP_INTERVAL_MS : NORMAL_LOOP_INTERVAL_MS;
-        int ret = poll(&pfd, 1, timeout_ms);
+        if (!pending_package.empty()) {
+            auto now = std::chrono::steady_clock::now();
+            if (now < validation_time) {
+                timeout_ms = std::chrono::duration_cast<std::chrono::milliseconds>(validation_time - now).count();
+            } else {
+                timeout_ms = 0;
+            }
+        }
 
+        int ret = poll(&pfd, 1, timeout_ms);
         if (ret < 0 && errno == EINTR) continue; 
 
         bool app_changed = false;
@@ -186,9 +196,12 @@ void encore_main_daemon(void) {
 
         if (app_changed) {
             if (game_registry.is_game_registered(new_fg_app)) {
-                active_package = new_fg_app;
-                in_game_session = true;
+                LOGI("[TRACE-MAIN] Logcat terpicu untuk: {}. Menunggu 1.5 detik validasi...", new_fg_app);
+                pending_package = new_fg_app;
+                validation_time = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
             } else {
+                pending_package.clear();
+                validation_time = std::chrono::steady_clock::time_point::max();
                 active_package.clear(); 
                 in_game_session = false;
             }
@@ -213,12 +226,9 @@ void encore_main_daemon(void) {
         if (force_exit) {
             if (!last_game_package.empty()) {
                 LOGI("Exit Game: {}", last_game_package);
-                ResolutionManager::GetInstance().ResetGameMode(last_game_package);
                 BypassManager::GetInstance().SetBypass(false);
-                
                 LOGI("[TRACE-MAIN] Memaksa DND OFF karena keluar dari game.");
                 set_do_not_disturb(false); 
-                
                 last_game_package = "";
             }
             
@@ -240,20 +250,17 @@ void encore_main_daemon(void) {
         // ===========================
         // ENTER GAME
         // ===========================
-        if (in_game_session && !active_package.empty() && active_package != last_game_package) {
-            
-            LOGI("[TRACE-MAIN] Logcat terpicu untuk: {}", active_package);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        if (!pending_package.empty() && std::chrono::steady_clock::now() >= validation_time) {
             std::string real_focused_app = GetFocusedPackage();
-            LOGI("[TRACE-MAIN] Dumpsys melapor fokus pada: {}", real_focused_app.empty() ? "UNKNOWN" : real_focused_app);
+            LOGI("[TRACE-MAIN] Validasi: Dumpsys melapor fokus pada: {}", real_focused_app.empty() ? "UNKNOWN" : real_focused_app);
 
-            if (real_focused_app != active_package) {
-                LOGW("[TRACE-MAIN] Validasi gagal. Fokus asli: {}. Resetting state...", real_focused_app);
-                active_package.clear();
-                in_game_session = false;
+            if (real_focused_app != pending_package) {
+                LOGW("[TRACE-MAIN] Validasi gagal. False-positive diabaikan.");
             } else {
+                active_package = pending_package;
+                in_game_session = true;
+
                 pid_t game_pid = GetAppPID_Fast(active_package);
-                
                 for (int i = 0; i < 5 && game_pid <= 0; i++) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     game_pid = GetAppPID_Fast(active_package);
@@ -263,7 +270,6 @@ void encore_main_daemon(void) {
                     LOGI("[TRACE-MAIN] PID {} Valid. Menerapkan Profil & DND.", game_pid);
                     
                     if (!last_game_package.empty()) {
-                        ResolutionManager::GetInstance().ResetGameMode(last_game_package);
                         set_do_not_disturb(false);
                     }
 
@@ -271,9 +277,7 @@ void encore_main_daemon(void) {
                     bool lite_mode = (active_game && active_game->lite_mode) || config_store.get_preferences().enforce_lite_mode;
                     bool enable_dnd = (active_game && active_game->enable_dnd);
                     bool enable_bypass = active_game ? active_game->enable_bypass : false;
-                    std::string downscale = active_game ? active_game->downscale_ratio : "1.0";
 
-                    ResolutionManager::GetInstance().ApplyGameMode(active_package, downscale);
                     BypassManager::GetInstance().SetBypass(enable_bypass);
                     
                     if (enable_dnd) {
@@ -290,6 +294,9 @@ void encore_main_daemon(void) {
                     in_game_session = false;
                 }
             }
+
+            pending_package.clear();
+            validation_time = std::chrono::steady_clock::time_point::max();
         }
     }
 }
@@ -358,6 +365,11 @@ int run_daemon() {
 
     LOGI("Initializing Custom Logic Managers...");
     BypassManager::GetInstance().Init();
+    std::vector<EncoreGameList> all_games;
+    for (const auto& pkg : game_registry.get_all_package_names()) {
+        if (auto game = game_registry.find_game(pkg)) all_games.push_back(*game);
+    }
+    ResolutionManager::GetInstance().SyncGameModes(all_games);
 
     LOGI("Encore Tweaks daemon started");
     SetModule_DescriptionStatus("\xF0\x9F\x98\x8B Tweaks applied successfully");
