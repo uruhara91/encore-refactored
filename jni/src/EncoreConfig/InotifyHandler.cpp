@@ -21,6 +21,7 @@
 #include <EncoreConfigStore.hpp>
 #include <EncoreLog.hpp>
 #include <GameRegistry.hpp>
+#include "../CustomLogic/ResolutionManager.hpp"
 
 enum WatchContext {
     WATCH_CONTEXT_GAMELIST,
